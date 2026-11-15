@@ -4,6 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Wyld Arcade">
+<meta property="og:title" content="Turbo Trails">
+<meta property="og:description" content="3D racing over hills, bridges and huge jumps. Motorcycle, supercar or F1, with 2-player split screen.">
+<meta property="og:url" content="http://play.wyldmedia.us/turbo-trails/">
+<meta property="og:image" content="http://play.wyldmedia.us/og/turbo-trails.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Turbo Trails">
+<meta name="twitter:description" content="3D racing over hills, bridges and huge jumps. Motorcycle, supercar or F1, with 2-player split screen.">
+<meta name="twitter:image" content="http://play.wyldmedia.us/og/turbo-trails.png">
+<meta name="description" content="3D racing over hills, bridges and huge jumps. Motorcycle, supercar or F1, with 2-player split screen.">
 <title>Turbo Trails</title>
 <style>
 :root{--ink:#14181f;--hi:#ff6a13;--y:#ffd23f}
@@ -921,7 +934,8 @@ function render(dt){
   views.forEach((r,i)=>{
     const cam=cams[i];
     const x=i*vw/split, w=vw/split;
-    if(r) updateCamera(i,r,dt,cam); else if(racers.length) updateDemoCam(dt);
+    if(window.__ttCam){ const c=window.__ttCam; cam.position.set(...c.p); cam.lookAt(...c.l); cam.fov=c.fov||55; cam.updateProjectionMatrix(); }
+    else if(r) updateCamera(i,r,dt,cam); else if(racers.length) updateDemoCam(dt);
     cam.aspect=w/vh; cam.updateProjectionMatrix();
     // shadows follow the first view
     if(i===0){ const f=r||racers[demoCam.who]; if(f){ const d=TH.sunDir; sun.position.set(f.x+d[0]*200,f.y+d[1]*200,f.z+d[2]*200); sun.target.position.set(f.x,f.y,f.z); sun.target.updateMatrixWorld(); } }
@@ -934,7 +948,7 @@ let last=performance.now(), acc=0, paused=false;
 function frame(now){
   requestAnimationFrame(frame);
   let dt=Math.min(.1,(now-last)/1000); last=now;
-  if(!paused && world){ acc+=dt; let n=0; while(acc>=STEP && n<6){ sim(STEP); acc-=STEP; n++; } if(n>=6) acc=0; }
+  if(!paused && world && !window.__ttFreeze){ acc+=dt; let n=0; while(acc>=STEP && n<6){ sim(STEP); acc-=STEP; n++; } if(n>=6) acc=0; }
   if(world && !window.__ttNoRender){ render(paused?0:dt); updateHud(); updateAudio(); }
 }
 
@@ -1169,7 +1183,7 @@ requestAnimationFrame(frame);
 // test hooks
 window.__tt = { get state(){return state;}, get racers(){return racers;}, get humans(){return humans;}, get T(){return T;}, keys, touchState,
   step(n){ for(let i=0;i<n;i++) sim(STEP); }, setMode(m){ mode=m; }, startRace, showResults, progressOf, LEVELS, store,
-  setAuto(v){ humans.forEach(h=>h.auto=v); } };
+  setAuto(v){ humans.forEach(h=>h.auto=v); }, sync(){ racers.forEach(r=>syncModel(r,1)); } };
 </script>
 </body>
 </html>
