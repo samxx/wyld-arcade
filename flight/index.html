@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oliver's Flight Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&family=B612+Mono:wght@400;700&family=Saira+Stencil+One&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* layout: an aeronautical sectional chart on the left, a flight-strip control panel on the right; stacks to one column under 900px */
+  color-scheme: light;
+  --paper:#E7EDDA;      /* chart paper */
+  --panel:#F8F7EE;      /* flight strip */
+  --ink:#1B2B44;        /* chart navy */
+  --ink-soft:#56637C;
+  --blue:#2B5EA7;       /* sectional blue: airports, grid */
+  --magenta:#B3207C;    /* sectional magenta: airspace, course line */
+  --hay:#E9B429;        /* hay and the yellow city tint */
+  --field:#D3E0B6;      /* terrain tint */
+  --good:#2E7D4F;
+  --rule:rgba(27,43,68,.22);
+  --display:'Saira Stencil One','Arial Black',Impact,sans-serif;
+  --body:'B612','Trebuchet MS',Verdana,sans-serif;
+  --mono:'B612 Mono',ui-monospace,Menlo,Consolas,monospace;
+  --step:480ms;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.4;display:flex;flex-direction:column;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+button:focus-visible,input:focus-visible{outline:3px solid var(--magenta);outline-offset:2px}
+
+/* top bar */
+.bar{display:flex;align-items:center;gap:16px;padding:10px 16px;border-bottom:2px solid var(--ink);background:var(--panel)}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(20px,2.4vw,28px);letter-spacing:.03em;margin:0;white-space:nowrap;text-transform:uppercase}
+.missions{flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;padding:4px 2px}
+.wp{flex:none;min-width:52px;height:52px;padding:2px 8px;border:2px solid var(--ink);border-radius:50%;background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.wp b{font-family:var(--display);font-weight:400;font-size:19px}
+.wp i{font-style:normal;font-size:9px;letter-spacing:1px;color:var(--magenta);height:10px}
+.wp[aria-current="true"]{background:var(--ink);color:var(--panel)}
+.wp[aria-current="true"] i{color:var(--hay)}
+.wp.build{border-radius:10px;border-style:dashed;padding:2px 12px}
+.wp.build b{font-size:15px;letter-spacing:.04em}
+.tool-btn{flex:none;height:44px;padding:0 14px;border:2px solid var(--ink);border-radius:10px;background:var(--panel);font-weight:700}
+.tool-btn[aria-expanded="true"]{background:var(--ink);color:var(--panel)}
+
+/* main split */
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(330px,1fr);gap:16px;padding:16px}
+.chart{min-height:0;min-width:0;display:flex;align-items:center;justify-content:center}
+#map{width:100%;height:100%;display:block}
+.panel{min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-right:2px}
+.card{background:var(--panel);border:2px solid var(--ink);border-radius:12px;padding:12px 14px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 4px}
+.brief-row{display:flex;gap:10px;align-items:flex-start}
+.brief-row h2{font-family:var(--display);font-weight:400;font-size:24px;letter-spacing:.02em;margin:0 0 4px;text-wrap:balance}
+.brief-row p{margin:0;max-width:46ch}
+.say{flex:none;width:48px;height:48px;border:2px solid var(--ink);border-radius:50%;background:var(--panel);display:grid;place-items:center}
+.say svg{width:24px;height:24px;fill:var(--ink)}
+.goals{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.goal{font-family:var(--mono);font-size:13px;border:1.5px solid var(--blue);color:var(--blue);border-radius:999px;padding:3px 10px;background:#fff}
+
+/* builder tools */
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.tools button{min-width:52px;height:52px;border:2px solid var(--ink);border-radius:10px;background:#fff;font-size:24px;padding:0 8px}
+.tools button span{font-size:13px;font-weight:700}
+.tools button[aria-pressed="true"]{background:var(--ink);color:#fff}
+
+/* command blocks */
+.palette{display:flex;flex-wrap:wrap;gap:10px}
+.cmd,.chip{display:inline-flex;align-items:center;gap:8px;border:2px solid var(--ink);border-radius:10px;font-weight:700;color:#fff;box-shadow:0 3px 0 var(--ink)}
+.cmd{height:58px;padding:0 16px;font-size:18px}
+.cmd:active{transform:translateY(3px);box-shadow:none}
+.cmd:disabled{opacity:.4;cursor:not-allowed}
+.cmd svg,.chip svg,.rep-title svg{width:22px;height:22px;fill:currentColor;flex:none}
+.c-F{background:var(--blue)}
+.c-L,.c-R{background:var(--ink)}
+.c-D{background:var(--hay);color:var(--ink)}
+.c-REP{background:var(--magenta)}
+
+/* flight plan */
+.plan-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.count{font-family:var(--mono);font-size:13px;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.plan{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;min-height:60px;margin-top:8px}
+.plan.locked{pointer-events:none}
+.chip{height:46px;padding:0 12px;font-size:15px;box-shadow:0 2px 0 var(--ink)}
+.chip.now,.rep.now{outline:4px solid var(--hay);outline-offset:2px}
+.chip.bad{outline:4px solid var(--magenta);outline-offset:2px}
+.slot{display:inline-flex;align-items:center;justify-content:center;height:46px;min-width:46px;padding:0 10px;border:2px dashed var(--ink-soft);border-radius:10px;background:transparent;color:var(--ink-soft);font-size:14px}
+.slot.here{border-color:var(--magenta);color:var(--magenta);animation:pulse 1.2s ease-in-out infinite}
+.rep{border:2px solid var(--magenta);border-radius:12px;background:rgba(179,32,124,.08);padding:6px;display:flex;flex-direction:column;gap:6px;max-width:100%}
+.rep.target{background:rgba(179,32,124,.16);box-shadow:0 0 0 3px rgba(179,32,124,.25)}
+.rep-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rep-title{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--magenta)}
+.step{width:40px;height:40px;border:2px solid var(--magenta);border-radius:8px;background:#fff;color:var(--magenta);font-weight:700;font-size:22px;line-height:1}
+.times{font-family:var(--mono);font-weight:700;font-size:20px;min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
+.lap{font-family:var(--mono);font-size:12px;color:var(--magenta)}
+.rep-x{margin-left:auto;width:36px;height:36px;border:0;background:transparent;color:var(--magenta);font-size:18px}
+.rep-body{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:46px}
+.done{height:46px;padding:0 12px;border:2px solid var(--magenta);border-radius:10px;background:var(--magenta);color:#fff;font-weight:700;font-size:14px}
+.empty{color:var(--ink-soft);font-size:15px;align-self:center}
+
+/* controls */
+.controls{display:flex;gap:10px;flex-wrap:wrap}
+.go{flex:1;min-width:160px;height:64px;border:2px solid var(--ink);border-radius:12px;background:var(--good);color:#fff;font-family:var(--display);font-size:24px;letter-spacing:.05em;text-transform:uppercase;box-shadow:0 4px 0 var(--ink)}
+.go:active{transform:translateY(4px);box-shadow:none}
+.go.stop{background:var(--magenta)}
+.minor{height:64px;padding:0 16px;border:2px solid var(--ink);border-radius:12px;background:var(--panel);font-weight:700}
+.minor:disabled{opacity:.4}
+
+/* result strip */
+.result{border:2px solid var(--ink);border-radius:12px;padding:12px 14px;background:#fff;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.result[hidden]{display:none}
+.result.win{background:var(--ink);color:#fff}
+.result.win .stars{font-size:30px;letter-spacing:4px;color:var(--hay)}
+.result.win .stars s{text-decoration:none;color:rgba(255,255,255,.25)}
+.result .big{font-family:var(--display);font-size:22px;letter-spacing:.04em;text-transform:uppercase}
+.result p{margin:0;flex:1;min-width:180px}
+.result button{height:48px;padding:0 16px;border:2px solid currentColor;border-radius:10px;background:var(--hay);color:var(--ink);font-weight:700}
+
+/* hangar */
+.hangar{position:absolute;right:16px;top:70px;z-index:5;width:min(340px,calc(100% - 32px));box-shadow:6px 6px 0 var(--ink)}
+.hangar[hidden]{display:none}
+.hangar h3{font-family:var(--display);font-weight:400;font-size:20px;margin:0 0 8px;text-transform:uppercase;letter-spacing:.04em}
+.row{display:grid;grid-template-columns:96px 1fr 44px;align-items:center;gap:10px;min-height:44px}
+.row label{font-weight:700;font-size:15px}
+.row output{font-family:var(--mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.row input[type=range]{width:100%;accent-color:var(--magenta)}
+.row input[type=checkbox]{width:24px;height:24px;accent-color:var(--magenta)}
+.swatches{display:flex;gap:8px;grid-column:2 / 4}
+.swatches button{width:36px;height:36px;border-radius:50%;border:2px solid var(--ink)}
+.swatches button[aria-pressed="true"]{outline:3px solid var(--magenta);outline-offset:2px}
+.hint{font-size:13px;color:var(--ink-soft);margin:8px 0 0}
+
+/* map pieces */
+#map text{font-family:var(--mono);user-select:none}
+#plane{transition:transform var(--step) ease-in-out}
+#planeBody.shake{animation:shake .35s linear}
+#planeBody.wag{animation:wag .9s ease-in-out}
+.hit{fill:transparent;pointer-events:none}
+.building .hit{pointer-events:all;cursor:pointer}
+.building .hit:hover{fill:rgba(179,32,124,.12)}
+.pop{animation:pop .35s ease-out}
+@keyframes pulse{50%{opacity:.45}}
+@keyframes shake{25%{transform:translate(-7px,0)}50%{transform:translate(7px,0)}75%{transform:translate(-5px,0)}}
+@keyframes wag{20%{transform:rotate(-16deg)}50%{transform:rotate(16deg)}80%{transform:rotate(-10deg)}}
+@keyframes pop{0%{opacity:0;transform:scale(.3)}70%{transform:scale(1.25)}100%{opacity:1;transform:scale(1)}}
+.pop,#planeBody{transform-box:fill-box;transform-origin:center}
+
+@media (max-width:900px){
+  body{display:block;height:auto;min-height:100%}
+  .bar{flex-wrap:wrap}
+  .missions{order:3;flex-basis:100%}
+  main{display:flex;flex-direction:column}
+  #map{height:auto}
+  .panel{overflow:visible}
+  .hangar{top:120px}
+}
+@media (prefers-reduced-motion:reduce){
+  .slot.here,#planeBody.shake,#planeBody.wag,.pop{animation:none}
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <h1>Oliver's Flight Plan</h1>
+  <nav class="missions" id="missions" aria-label="Missions"></nav>
+  <button class="tool-btn" id="hangarBtn" aria-expanded="false" aria-controls="hangar">Hangar</button>
+</header>
+
+<section class="card hangar" id="hangar" hidden aria-label="Hangar settings">
+  <h3>Hangar</h3>
+  <div class="row"><label id="colorLabel">Paint</label><div class="swatches" id="swatches" role="group" aria-labelledby="colorLabel"></div></div>
+  <div class="row"><label for="speed">Speed</label><input type="range" id="speed" min="1" max="3" step="1"><output id="speedOut" for="speed"></output></div>
+  <div class="row"><label for="size">Plane size</label><input type="range" id="size" min="0.6" max="1.8" step="0.1"><output id="sizeOut" for="size"></output></div>
+  <div class="row"><label for="trail">Course line</label><input type="checkbox" id="trail"><span></span></div>
+  <div class="row"><label for="sound">Sound</label><input type="checkbox" id="sound"><span></span></div>
+  <p class="hint">Change a setting, then take off and see what happens.</p>
+</section>
+
+<main>
+  <div class="chart">
+    <svg id="map" viewBox="-36 -36 672 578" role="img" aria-label="Farm chart with the plane, animals, storms and runway">
+      <defs>
+        <pattern id="hatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="12" height="12" fill="rgba(179,32,124,.10)"/><line x1="0" y1="0" x2="0" y2="12" stroke="#B3207C" stroke-width="3" opacity=".55"/>
+        </pattern>
+      </defs>
+      <rect x="0" y="0" width="600" height="500" fill="#D3E0B6" stroke="#1B2B44" stroke-width="3"/>
+      <g id="terrain"></g>
+      <g id="grid"></g>
+      <g id="labels"></g>
+      <g id="features"></g>
+      <polyline id="trail" fill="none" stroke="#B3207C" stroke-width="5" stroke-linecap="round" stroke-dasharray="1 11" points=""/>
+      <g id="plane"><g id="planeBody"></g></g>
+      <g id="hits"></g>
+      <text x="300" y="528" text-anchor="middle" font-size="12" letter-spacing="2" fill="#56637C">MEEK FARM SECTIONAL · NOT FOR NAVIGATION</text>
+    </svg>
+  </div>
+
+  <div class="panel">
+    <section class="card" aria-labelledby="briefTitle">
+      <p class="eyebrow" id="briefEyebrow"></p>
+      <div class="brief-row">
+        <div style="flex:1;min-width:0">
+          <h2 id="briefTitle"></h2>
+          <p id="briefText"></p>
+        </div>
+        <button class="say" id="sayBtn" aria-label="Read the mission out loud">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 00-2.5-4v8a4.5 4.5 0 002.5-4zM14 3.2v2.1a7 7 0 010 13.4v2.1a9 9 0 000-17.6z"/></svg>
+        </button>
+      </div>
+      <div class="goals" id="goals"></div>
+      <div class="tools" id="tools" hidden role="group" aria-label="Map builder tools"></div>
+    </section>
+
+    <section class="card" aria-labelledby="cmdTitle">
+      <p class="eyebrow" id="cmdTitle">Commands · tap to add</p>
+      <div class="palette" id="palette"></div>
+    </section>
+
+    <section class="card" aria-labelledby="planTitle">
+      <div class="plan-head">
+        <p class="eyebrow" id="planTitle">Flight plan · tap a block to remove it</p>
+        <span class="count" id="count"></span>
+      </div>
+      <div class="plan" id="plan"></div>
+    </section>
+
+    <div class="controls">
+      <button class="go" id="goBtn">Take off</button>
+      <button class="minor" id="undoBtn">Undo</button>
+      <button class="minor" id="clearBtn">Clear</button>
+    </div>
+
+    <div class="result" id="result" role="status" aria-live="polite" hidden></div>
+  </div>
+</main>
+
+<script>
+(function(){
+'use strict';
+
+/*LOGIC-START*/
+var W = 6, H = 5;
+var DIRS = [[0,-1],[1,0],[0,1],[-1,0]]; // N E S W
+var LEVELS = [
+  { name:'First flight', brief:'Captain, fly straight ahead and stop on the runway.',
+    start:{x:0,y:2,d:1}, animals:[], storms:[], land:{x:3,y:2}, pal:['F'], par:3 },
+  { name:'Turn to final', brief:'The runway is up and to the right. Fly, turn, then fly again.',
+    start:{x:1,y:4,d:0}, animals:[], storms:[], land:{x:4,y:1}, pal:['F','L','R'], par:7 },
+  { name:'Hungry cows', brief:'The cows need hay. Fly over them, drop hay, then land on the runway.',
+    start:{x:0,y:3,d:1}, animals:[{x:3,y:3,t:'cow'}], storms:[], land:{x:5,y:3}, pal:['F','L','R','D'], par:6 },
+  { name:'Two stops', brief:'The sheep and the chickens are both hungry. Feed them all.',
+    start:{x:0,y:4,d:1}, animals:[{x:2,y:4,t:'sheep'},{x:2,y:1,t:'chicken'}], storms:[], land:null, pal:['F','L','R','D'], par:8 },
+  { name:'The long haul', brief:'The runway is far away. Use Repeat so one Fly block does the work of five.',
+    start:{x:0,y:2,d:1}, animals:[], storms:[], land:{x:5,y:2}, pal:['F','L','R','REP'], par:2 },
+  { name:'Feeding line', brief:'Four pigs in a row. Put Fly and Drop hay inside one Repeat.',
+    start:{x:0,y:2,d:1}, animals:[{x:1,y:2,t:'pig'},{x:2,y:2,t:'pig'},{x:3,y:2,t:'pig'},{x:4,y:2,t:'pig'}], storms:[], land:null, pal:['F','L','R','D','REP'], par:3 },
+  { name:'Fence patrol', brief:'Fly a square around the pasture, feed everyone, and come home to the runway.',
+    start:{x:1,y:4,d:0}, animals:[{x:1,y:2,t:'cow'},{x:3,y:2,t:'horse'},{x:3,y:4,t:'cow'}], storms:[], land:{x:1,y:4}, pal:['F','L','R','D','REP'], par:5 },
+  { name:'Storm front', brief:'Thunderstorms ahead. Plan a route around them to the runway.',
+    start:{x:0,y:4,d:1}, animals:[], storms:[{x:2,y:4},{x:2,y:3},{x:4,y:4},{x:4,y:3}], land:{x:5,y:4}, pal:['F','L','R','D','REP'], par:9 },
+  { name:'Stair steps', brief:'The sheep are on a hillside. Find the pattern that climbs like stairs.',
+    start:{x:0,y:4,d:1}, animals:[{x:1,y:3,t:'sheep'},{x:2,y:2,t:'sheep'},{x:3,y:1,t:'sheep'}], storms:[], land:{x:4,y:0}, pal:['F','L','R','D','REP'], par:6 },
+  { name:'The big delivery', brief:'Every animal on the farm is hungry. Use two Repeats, then land.',
+    start:{x:0,y:4,d:0}, animals:[{x:0,y:3,t:'cow'},{x:0,y:2,t:'sheep'},{x:0,y:1,t:'pig'},{x:1,y:0,t:'chicken'},{x:2,y:0,t:'horse'},{x:3,y:0,t:'cow'}], storms:[], land:{x:5,y:0}, pal:['F','L','R','D','REP'], par:10 }
+];
+
+function countBlocks(p){
+  return p.reduce(function(n,b){ return n + 1 + (b.t==='REP' ? b.kids.length : 0); }, 0);
+}
+function flatten(p){
+  var steps = [];
+  p.forEach(function(b,i){
+    if(b.t==='REP'){
+      for(var n=0;n<b.n;n++) b.kids.forEach(function(k,j){ steps.push({c:k.t, path:[i,j], lap:n+1}); });
+    } else steps.push({c:b.t, path:[i], lap:0});
+  });
+  return steps;
+}
+function findAt(arr,x,y){ for(var i=0;i<arr.length;i++) if(arr[i].x===x && arr[i].y===y) return i; return -1; }
+function simulate(lv,p){
+  var steps = flatten(p).slice(0,400);
+  var x = lv.start.x, y = lv.start.y, d = lv.start.d;
+  var fed = {}, fedCount = 0, frames = [], fail = null;
+  for(var i=0;i<steps.length;i++){
+    var s = steps[i];
+    var fr = {c:s.c, path:s.path, lap:s.lap, x:x, y:y, turn:0, ev:null, fedIdx:-1};
+    if(s.c==='L'){ d=(d+3)%4; fr.turn=-1; }
+    else if(s.c==='R'){ d=(d+1)%4; fr.turn=1; }
+    else if(s.c==='F'){
+      var nx = x+DIRS[d][0], ny = y+DIRS[d][1];
+      if(nx<0||ny<0||nx>=W||ny>=H){ fr.ev='edge'; fail={why:'edge',path:s.path}; }
+      else { x=nx; y=ny; fr.x=x; fr.y=y;
+        if(findAt(lv.storms,x,y)>=0){ fr.ev='storm'; fail={why:'storm',path:s.path}; } }
+    }
+    else if(s.c==='D'){
+      var k = findAt(lv.animals,x,y);
+      if(k>=0 && !fed[k]){ fed[k]=true; fedCount++; fr.ev='fed'; fr.fedIdx=k; } else fr.ev='miss';
+    }
+    frames.push(fr);
+    if(fail) break;
+  }
+  var result;
+  if(fail) result = {ok:false, why:fail.why, path:fail.path};
+  else {
+    var hungry = lv.animals.length - fedCount;
+    if(hungry>0) result = {ok:false, why:'hungry', hungry:hungry};
+    else if(lv.land && !(x===lv.land.x && y===lv.land.y)) result = {ok:false, why:'land'};
+    else result = {ok:true};
+  }
+  return {frames:frames, result:result};
+}
+function starsFor(lv,p){
+  if(!lv.par) return 3;
+  var n = countBlocks(p);
+  return n<=lv.par ? 3 : (n<=lv.par+2 ? 2 : 1);
+}
+/*LOGIC-END*/
+
+var NAME = {F:'Fly', L:'Left', R:'Right', D:'Drop hay', REP:'Repeat'};
+var ICON = {
+  F:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 10h-5v10H9V12H4z"/></svg>',
+  L:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3L3 10l7 7v-4h4a3 3 0 013 3v5h4v-5a7 7 0 00-7-7h-4z"/></svg>',
+  R:'<svg viewBox="0 0 24 24" aria-hidden="true"><path transform="translate(24,0) scale(-1,1)" d="M10 3L3 10l7 7v-4h4a3 3 0 013 3v5h4v-5a7 7 0 00-7-7h-4z"/></svg>',
+  D:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 1h4v6h4l-6 7-6-7h4z"/><rect x="3" y="16" width="18" height="6" rx="1.5"/></svg>',
+  REP:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1l5 5-5 5V8H8a3 3 0 00-3 3v1H2v-1a6 6 0 016-6h9z"/><path d="M7 23l-5-5 5-5v3h9a3 3 0 003-3v-1h3v1a6 6 0 01-6 6H7z"/></svg>'
+};
+var EMOJI = {cow:'🐄', sheep:'🐑', pig:'🐖', chicken:'🐔', horse:'🐎'};
+var ANIMAL_WORD = {cow:'cow', sheep:'sheep', pig:'pig', chicken:'chicken', horse:'horse'};
+var PAINTS = ['#D9482B','#2B5EA7','#E9B429','#2E7D4F','#FFFFFF'];
+var SPEED_MS = {1:780, 2:480, 3:250};
+var SPEED_WORD = {1:'slow', 2:'cruise', 3:'fast'};
+var KEY = 'oliver-flight-plan-v1';
+var BUILD = LEVELS.length; // index of the build-your-own mission
+
+var S = {
+  level:0, program:[], target:-1, running:false, tool:'cow',
+  progress:{},
+  settings:{paint:PAINTS[0], speed:2, size:1, trail:true, sound:true},
+  custom:{ name:'My mission', brief:'You are the mission planner. Set up the map, then hand it to your co-pilot.',
+           start:{x:0,y:4,d:0}, animals:[{x:3,y:1,t:'cow'}], storms:[{x:2,y:2}], land:{x:5,y:0}, pal:['F','L','R','D','REP'], par:0 }
+};
+var runId = 0;
+
+function $(s){ return document.querySelector(s); }
+function cur(){ return S.level===BUILD ? S.custom : LEVELS[S.level]; }
+function isBuild(){ return S.level===BUILD; }
+function center(x,y){ return [x*100+50, y*100+50]; }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+
+/* ---------- saving ---------- */
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify({level:S.level, progress:S.progress, settings:S.settings, custom:S.custom})); }catch(e){}
+}
+function load(seed){
+  var d = null;
+  if(seed && seed.settings) d = seed;
+  else { try{ d = JSON.parse(localStorage.getItem(KEY) || 'null'); }catch(e){ d = null; } }
+  if(!d) return;
+  if(typeof d.level==='number' && d.level>=0 && d.level<=BUILD) S.level = d.level;
+  if(d.progress) S.progress = d.progress;
+  if(d.settings) Object.keys(S.settings).forEach(function(k){ if(k in d.settings) S.settings[k] = d.settings[k]; });
+  if(d.custom && d.custom.start) S.custom = d.custom;
+  if(Array.isArray(d.program)) S.program = d.program;
+}
+
+/* ---------- sound and speech ---------- */
+var actx = null;
+function audioInit(){
+  if(actx || !S.settings.sound) return;
+  try{ var AC = window.AudioContext || window.webkitAudioContext; if(AC) actx = new AC(); }catch(e){ actx = null; }
+}
+function beep(freq, dur, type, when, gain){
+  if(!actx || !S.settings.sound) return;
+  try{
+    var t = actx.currentTime + (when||0), o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || 'triangle'; o.frequency.setValueAtTime(freq, t);
+    g.gain.setValueAtTime(gain || 0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t+dur+0.02);
+  }catch(e){}
+}
+function tone(kind){
+  if(kind==='fly') beep(180,0.14,'sawtooth',0,0.04);
+  else if(kind==='turn') beep(520,0.06,'square',0,0.03);
+  else if(kind==='fed'){ beep(660,0.1); beep(880,0.16,'triangle',0.1); }
+  else if(kind==='miss') beep(240,0.14,'sine');
+  else if(kind==='fail'){ beep(140,0.3,'sawtooth',0,0.06); }
+  else if(kind==='win'){ [523,659,784,1047].forEach(function(f,i){ beep(f,0.2,'triangle',i*0.12); }); }
+  else if(kind==='tap') beep(440,0.04,'square',0,0.02);
+}
+function speak(text){
+  try{
+    if(!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text); u.rate = 0.95;
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+/* ---------- map ---------- */
+function drawStatic(){
+  var t = '';
+  // terrain tints, a creek and a pond: decoration only, kept faint
+  t += '<ellipse cx="150" cy="120" rx="150" ry="80" fill="#E9D98A" opacity=".35"/>';
+  t += '<ellipse cx="470" cy="360" rx="150" ry="110" fill="#BFD39C" opacity=".7"/>';
+  t += '<ellipse cx="470" cy="360" rx="95" ry="62" fill="none" stroke="#A9895B" stroke-width="1.5" opacity=".5"/>';
+  t += '<ellipse cx="470" cy="360" rx="50" ry="30" fill="none" stroke="#A9895B" stroke-width="1.5" opacity=".5"/>';
+  t += '<path d="M0 260 C90 230 140 300 230 280 S380 200 450 230 S560 180 600 200" fill="none" stroke="#2B5EA7" stroke-width="3" opacity=".3"/>';
+  t += '<ellipse cx="318" cy="452" rx="44" ry="20" fill="#2B5EA7" opacity=".16"/>';
+  $('#terrain').innerHTML = t;
+  var g = '', l = '', hts = '', i, j;
+  for(i=1;i<W;i++) g += '<line x1="'+(i*100)+'" y1="0" x2="'+(i*100)+'" y2="500" stroke="#2B5EA7" stroke-width="1.5" opacity=".35"/>';
+  for(j=1;j<H;j++) g += '<line x1="0" y1="'+(j*100)+'" x2="600" y2="'+(j*100)+'" stroke="#2B5EA7" stroke-width="1.5" opacity=".35"/>';
+  $('#grid').innerHTML = g;
+  for(i=0;i<W;i++) l += '<text x="'+(i*100+50)+'" y="-12" text-anchor="middle" font-size="18" font-weight="700" fill="#2B5EA7">'+'ABCDEF'.charAt(i)+'</text>';
+  for(j=0;j<H;j++) l += '<text x="-18" y="'+(j*100+56)+'" text-anchor="middle" font-size="18" font-weight="700" fill="#2B5EA7">'+(j+1)+'</text>';
+  l += '<g transform="translate(617,24)"><path d="M0 -22 L7 6 L0 1 L-7 6 Z" fill="#1B2B44"/><text x="0" y="24" text-anchor="middle" font-size="14" font-weight="700" fill="#1B2B44">N</text></g>';
+  $('#labels').innerHTML = l;
+  for(j=0;j<H;j++) for(i=0;i<W;i++) hts += '<rect class="hit" x="'+(i*100)+'" y="'+(j*100)+'" width="100" height="100" data-x="'+i+'" data-y="'+j+'"/>';
+  $('#hits').innerHTML = hts;
+}
+function drawPlaneBody(){
+  var p = S.settings.paint, ink = '#1B2B44';
+  $('#planeBody').innerHTML =
+    '<rect x="-40" y="-9" width="80" height="15" rx="6" fill="'+p+'" stroke="'+ink+'" stroke-width="2.5"/>'+
+    '<rect x="-25" y="-19" width="9" height="20" rx="3.5" fill="#F8F7EE" stroke="'+ink+'" stroke-width="2"/>'+
+    '<rect x="16" y="-19" width="9" height="20" rx="3.5" fill="#F8F7EE" stroke="'+ink+'" stroke-width="2"/>'+
+    '<line x1="-29" y1="-20" x2="-12" y2="-20" stroke="'+ink+'" stroke-width="2.5" stroke-linecap="round"/>'+
+    '<line x1="12" y1="-20" x2="29" y2="-20" stroke="'+ink+'" stroke-width="2.5" stroke-linecap="round"/>'+
+    '<rect x="-15" y="24" width="30" height="8" rx="3.5" fill="'+p+'" stroke="'+ink+'" stroke-width="2.5"/>'+
+    '<path d="M0 -38 C7 -38 9 -22 9 -8 L6 28 C5 34 -5 34 -6 28 L-9 -8 C-9 -22 -7 -38 0 -38 Z" fill="#F8F7EE" stroke="'+ink+'" stroke-width="2.5"/>'+
+    '<path d="M-4.5 -25 C-4 -31 4 -31 4.5 -25 Z" fill="'+ink+'"/>'+
+    '<rect x="-2.5" y="-14" width="5" height="34" rx="2.5" fill="'+p+'" opacity=".9"/>';
+}
+function placePlane(x,y,angle,instant){
+  var el = $('#plane'), c = center(x,y);
+  if(instant) el.style.transition = 'none';
+  el.style.transform = 'translate('+c[0]+'px,'+c[1]+'px) rotate('+angle+'deg) scale('+S.settings.size+')';
+  if(instant){ el.getBoundingClientRect(); el.style.transition = ''; }
+}
+function drawFeatures(){
+  var lv = cur(), f = '';
+  if(lv.land){
+    var c = center(lv.land.x, lv.land.y);
+    f += '<g><circle cx="'+c[0]+'" cy="'+c[1]+'" r="43" fill="rgba(255,255,255,.55)" stroke="#2B5EA7" stroke-width="4"/>'+
+         '<rect x="'+(c[0]-33)+'" y="'+(c[1]-11)+'" width="66" height="22" rx="3" fill="#1B2B44"/>'+
+         '<line x1="'+(c[0]-25)+'" y1="'+c[1]+'" x2="'+(c[0]+25)+'" y2="'+c[1]+'" stroke="#fff" stroke-width="3" stroke-dasharray="8 6"/></g>';
+  }
+  lv.storms.forEach(function(s){
+    var c = center(s.x,s.y);
+    f += '<g><rect x="'+(s.x*100+7)+'" y="'+(s.y*100+7)+'" width="86" height="86" rx="6" fill="url(#hatch)" stroke="#B3207C" stroke-width="3" stroke-dasharray="10 6"/>'+
+         '<text x="'+c[0]+'" y="'+(c[1]+17)+'" text-anchor="middle" font-size="48">⛈️</text></g>';
+  });
+  lv.animals.forEach(function(a,i){
+    var c = center(a.x,a.y);
+    f += '<g id="an'+i+'"><text x="'+c[0]+'" y="'+(c[1]+18)+'" text-anchor="middle" font-size="52">'+EMOJI[a.t]+'</text>'+
+         '<g id="badge'+i+'"><circle cx="'+(c[0]+32)+'" cy="'+(c[1]-30)+'" r="14" fill="#B3207C" stroke="#fff" stroke-width="2.5"/>'+
+         '<text x="'+(c[0]+32)+'" y="'+(c[1]-23)+'" text-anchor="middle" font-size="20" font-weight="700" fill="#fff">!</text></g></g>';
+  });
+  $('#features').innerHTML = f;
+}
+function markFed(i){
+  var lv = cur(), a = lv.animals[i], c = center(a.x,a.y), b = $('#badge'+i);
+  if(!b) return;
+  b.innerHTML = '<g class="pop"><rect x="'+(c[0]-44)+'" y="'+(c[1]+20)+'" width="30" height="20" rx="4" fill="#E9B429" stroke="#1B2B44" stroke-width="2.5"/>'+
+    '<line x1="'+(c[0]-34)+'" y1="'+(c[1]+20)+'" x2="'+(c[0]-34)+'" y2="'+(c[1]+40)+'" stroke="#1B2B44" stroke-width="2"/>'+
+    '<line x1="'+(c[0]-24)+'" y1="'+(c[1]+20)+'" x2="'+(c[0]-24)+'" y2="'+(c[1]+40)+'" stroke="#1B2B44" stroke-width="2"/></g>'+
+    '<g class="pop"><circle cx="'+(c[0]+32)+'" cy="'+(c[1]-30)+'" r="14" fill="#2E7D4F" stroke="#fff" stroke-width="2.5"/>'+
+    '<path d="M'+(c[0]+25)+' '+(c[1]-30)+' l5 5 l9 -10" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></g>';
+}
+function missPuff(x,y){
+  var c = center(x,y), g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.setAttribute('class','pop');
+  g.innerHTML = '<rect x="'+(c[0]-12)+'" y="'+(c[1]+26)+'" width="24" height="16" rx="4" fill="#E9B429" stroke="#1B2B44" stroke-width="2" opacity=".6"/>';
+  $('#features').appendChild(g);
+}
+function drawTrail(pts){
+  $('#trail').setAttribute('points', S.settings.trail ? pts.map(function(p){ return p.join(','); }).join(' ') : '');
+}
+function resetFlight(){
+  var lv = cur();
+  drawFeatures(); drawTrail([]);
+  $('#planeBody').classList.remove('shake','wag');
+  placePlane(lv.start.x, lv.start.y, lv.start.d*90, true);
+  clearMarks();
+}
+
+/* ---------- panel rendering ---------- */
+function starText(n){ return n ? '★★★'.slice(0,n) : ''; }
+function renderMissions(){
+  var h = '';
+  LEVELS.forEach(function(lv,i){
+    var st = S.progress[i] || 0;
+    h += '<button class="wp" data-level="'+i+'" aria-current="'+(S.level===i)+'" aria-label="Mission '+(i+1)+', '+lv.name+(st?', '+st+' stars':'')+'"><b>'+(i+1)+'</b><i>'+starText(st)+'</i></button>';
+  });
+  h += '<button class="wp build" data-level="'+BUILD+'" aria-current="'+(S.level===BUILD)+'"><b>BUILD</b><i></i></button>';
+  $('#missions').innerHTML = h;
+  var on = $('#missions [aria-current="true"]');
+  if(on && on.scrollIntoView){ try{ on.scrollIntoView({block:'nearest', inline:'nearest'}); }catch(e){} }
+}
+function renderBrief(){
+  var lv = cur(), g = '';
+  $('#briefEyebrow').textContent = isBuild() ? 'Mission builder' : 'Mission ' + (S.level+1) + ' of ' + LEVELS.length;
+  $('#briefTitle').textContent = lv.name;
+  $('#briefText').textContent = lv.brief;
+  if(lv.animals.length) g += '<span class="goal">Feed ' + lv.animals.length + (lv.animals.length===1 ? ' animal' : ' animals') + '</span>';
+  if(lv.land) g += '<span class="goal">Finish on the runway</span>';
+  if(lv.storms.length) g += '<span class="goal">Stay out of storms</span>';
+  if(lv.par) g += '<span class="goal">3 stars: ' + lv.par + ' blocks or fewer</span>';
+  $('#goals').innerHTML = g;
+  var tools = $('#tools');
+  tools.hidden = !isBuild();
+  $('#map').classList.toggle('building', isBuild());
+  if(isBuild()){
+    var list = [['plane','<span>Plane</span>','Place the plane. Tap it again to turn it'],
+      ['cow',EMOJI.cow,'Cow'],['sheep',EMOJI.sheep,'Sheep'],['pig',EMOJI.pig,'Pig'],['chicken',EMOJI.chicken,'Chicken'],['horse',EMOJI.horse,'Horse'],
+      ['storm','⛈️','Storm'],['land','<span>Runway</span>','Runway'],['erase','<span>Erase</span>','Erase']];
+    tools.innerHTML = list.map(function(t){
+      return '<button data-tool="'+t[0]+'" aria-pressed="'+(S.tool===t[0])+'" aria-label="'+t[2]+'">'+t[1]+'</button>';
+    }).join('');
+  }
+}
+function renderPalette(){
+  var lv = cur();
+  $('#palette').innerHTML = lv.pal.map(function(t){
+    var off = (t==='REP' && S.target>=0) || S.running;
+    return '<button class="cmd c-'+t+'" data-cmd="'+t+'"'+(off?' disabled':'')+'>'+ICON[t]+NAME[t]+'</button>';
+  }).join('');
+}
+function chipHTML(b, path){
+  return '<button class="chip c-'+b.t+'" data-path="'+path+'" aria-label="'+NAME[b.t]+'. Tap to remove">'+ICON[b.t]+NAME[b.t]+'</button>';
+}
+function renderProgram(){
+  var h = '';
+  S.program.forEach(function(b,i){
+    if(b.t==='REP'){
+      var tgt = S.target===i;
+      h += '<div class="rep'+(tgt?' target':'')+'" data-rep="'+i+'">'+
+        '<div class="rep-head"><span class="rep-title">'+ICON.REP+'Repeat</span>'+
+        '<button class="step" data-step="-1" data-i="'+i+'" id="less'+i+'" aria-label="Repeat fewer times">−</button>'+
+        '<span class="times" aria-label="'+b.n+' times">×'+b.n+'</span>'+
+        '<button class="step" data-step="1" data-i="'+i+'" id="more'+i+'" aria-label="Repeat more times">+</button>'+
+        '<span class="lap" id="lap'+i+'"></span>'+
+        '<button class="rep-x" data-del="'+i+'" aria-label="Remove this Repeat">✕</button></div>'+
+        '<div class="rep-body" data-body="'+i+'">'+
+        b.kids.map(function(k,j){ return chipHTML(k, i+'.'+j); }).join('')+
+        (tgt ? '<span class="slot here" aria-hidden="true">next block goes here</span><button class="done" data-done="1">Done</button>'
+             : '<button class="slot" data-open="'+i+'" aria-label="Add more blocks inside this Repeat">+</button>')+
+        '</div></div>';
+    } else h += chipHTML(b, ''+i);
+  });
+  if(!S.program.length) h += '<span class="empty">Tap a command above to start your flight plan.</span>';
+  else if(S.target<0 && !S.running) h += '<span class="slot here" aria-hidden="true">next</span>';
+  var plan = $('#plan');
+  plan.innerHTML = h;
+  plan.classList.toggle('locked', S.running);
+  var n = countBlocks(S.program), lv = cur();
+  $('#count').textContent = n + (n===1 ? ' block' : ' blocks') + (lv.par ? ' · par ' + lv.par : '');
+  $('#undoBtn').disabled = S.running || !n;
+  $('#clearBtn').disabled = S.running || !n;
+  var go = $('#goBtn');
+  go.textContent = S.running ? 'Stop' : 'Take off';
+  go.classList.toggle('stop', S.running);
+  renderPalette();
+}
+function clearMarks(){
+  var els = document.querySelectorAll('#plan .now, #plan .bad');
+  for(var i=0;i<els.length;i++) els[i].classList.remove('now','bad');
+  var laps = document.querySelectorAll('#plan .lap');
+  for(var j=0;j<laps.length;j++) laps[j].textContent = '';
+}
+function markChip(path, lap, cls){
+  var olds = document.querySelectorAll('#plan .now');
+  for(var i=0;i<olds.length;i++) olds[i].classList.remove('now');
+  var el = document.querySelector('#plan [data-path="'+path.join('.')+'"]');
+  if(el){ el.classList.add(cls || 'now'); if(el.scrollIntoView){ try{ el.scrollIntoView({block:'nearest'}); }catch(e){} } }
+  if(path.length===2){
+    var lp = $('#lap'+path[0]);
+    if(lp) lp.textContent = 'lap ' + lap + ' of ' + S.program[path[0]].n;
+  }
+}
+function showResult(kind, html){
+  var r = $('#result');
+  r.className = 'result' + (kind==='win' ? ' win' : '');
+  r.innerHTML = html; r.hidden = false;
+  if(r.scrollIntoView){ try{ r.scrollIntoView({block:'nearest'}); }catch(e){} }
+}
+function hideResult(){ $('#result').hidden = true; }
+function renderHangar(){
+  $('#swatches').innerHTML = PAINTS.map(function(p,i){
+    return '<button data-paint="'+p+'" style="background:'+p+'" aria-pressed="'+(S.settings.paint===p)+'" aria-label="Paint color '+(i+1)+'"></button>';
+  }).join('');
+  $('#speed').value = S.settings.speed; $('#speedOut').textContent = SPEED_WORD[S.settings.speed];
+  $('#size').value = S.settings.size; $('#sizeOut').textContent = Number(S.settings.size).toFixed(1) + 'x';
+  $('#trail').checked = !!S.settings.trail; $('#sound').checked = !!S.settings.sound;
+  document.documentElement.style.setProperty('--step', SPEED_MS[S.settings.speed] + 'ms');
+}
+function renderAll(){
+  renderMissions(); renderBrief(); renderProgram(); renderHangar(); drawPlaneBody(); resetFlight();
+}
+
+/* ---------- editing the flight plan ---------- */
+function addCmd(t){
+  if(S.running) return;
+  audioInit(); tone('tap'); hideResult(); clearMarks();
+  if(t==='REP'){
+    if(S.target>=0) return;
+    S.program.push({t:'REP', n:3, kids:[]});
+    S.target = S.program.length-1;
+  } else if(S.target>=0 && S.program[S.target]){
+    S.program[S.target].kids.push({t:t});
+  } else {
+    S.program.push({t:t});
+  }
+  renderProgram();
+}
+function removeAt(path){
+  var p = path.split('.').map(Number);
+  if(p.length===2){ S.program[p[0]].kids.splice(p[1],1); }
+  else {
+    S.program.splice(p[0],1);
+    if(S.target===p[0]) S.target = -1; else if(S.target>p[0]) S.target--;
+  }
+  hideResult(); renderProgram();
+}
+function undo(){
+  if(S.running || !S.program.length) return;
+  var t = S.target;
+  if(t>=0 && S.program[t] && S.program[t].kids.length){ S.program[t].kids.pop(); }
+  else {
+    var last = S.program[S.program.length-1];
+    if(last.t==='REP' && last.kids.length && t<0) last.kids.pop();
+    else { S.program.pop(); if(S.target>=S.program.length) S.target = -1; }
+  }
+  hideResult(); renderProgram();
+}
+function gotoLevel(i){
+  runId++; S.running = false;
+  S.level = i; S.program = []; S.target = -1;
+  hideResult(); save(); renderAll();
+}
+
+/* ---------- flying ---------- */
+function failText(res){
+  if(res.why==='edge') return '<p><b>Off the chart.</b> The plan tried to fly past the edge of the map. Look at the pink block and turn before the edge.</p>';
+  if(res.why==='storm') return '<p><b>Storm cell.</b> The pink block flew into a thunderstorm. Plan a route around it.</p>';
+  if(res.why==='hungry') return '<p><b>Still hungry: ' + res.hungry + '.</b> Fly over each animal and use Drop hay while you are on top of it.</p>';
+  return '<p><b>Almost.</b> The hay is delivered. Now finish the plan on the runway.</p>';
+}
+function fly(){
+  var lv = cur();
+  if(S.running){ runId++; S.running = false; resetFlight(); renderProgram(); return; }
+  hideResult();
+  if(!countBlocks(S.program)){ showResult('warn','<p><b>Your flight plan is empty.</b> Tap a command to add it.</p>'); return; }
+  if(isBuild() && !lv.animals.length && !lv.land){ showResult('warn','<p><b>No goal yet.</b> Add an animal or a runway to the map first.</p>'); return; }
+  audioInit();
+  S.target = -1; S.running = true;
+  var my = ++runId;
+  resetFlight(); renderProgram();
+  var sim = simulate(lv, S.program);
+  var angle = lv.start.d*90, pts = [center(lv.start.x, lv.start.y)], ms = SPEED_MS[S.settings.speed];
+  var i = 0;
+  function next(){
+    if(my!==runId) return;
+    if(i>=sim.frames.length){ finish(sim.result, my); return; }
+    var fr = sim.frames[i++];
+    markChip(fr.path, fr.lap);
+    var body = $('#planeBody');
+    if(fr.turn){ angle += fr.turn*90; placePlane(fr.x, fr.y, angle); tone('turn'); }
+    else if(fr.c==='F'){
+      if(fr.ev==='edge'){ body.classList.remove('shake'); void body.getBoundingClientRect(); body.classList.add('shake'); tone('fail'); }
+      else { placePlane(fr.x, fr.y, angle); tone('fly'); }
+    }
+    else if(fr.c==='D'){
+      if(fr.ev==='fed'){ markFed(fr.fedIdx); tone('fed'); } else { missPuff(fr.x, fr.y); tone('miss'); }
+    }
+    sleep(ms).then(function(){
+      if(my!==runId) return;
+      if(fr.c==='F' && fr.ev!=='edge'){ pts.push(center(fr.x, fr.y)); drawTrail(pts); }
+      if(fr.ev==='storm'){ body.classList.remove('shake'); void body.getBoundingClientRect(); body.classList.add('shake'); tone('fail'); sleep(380).then(next); }
+      else next();
+    });
+  }
+  sleep(200).then(next);
+}
+function finish(res, my){
+  if(my!==runId) return;
+  S.running = false;
+  renderProgram();
+  if(res.ok){
+    var lv = cur(), n = countBlocks(S.program), st = starsFor(lv, S.program);
+    tone('win');
+    var body = $('#planeBody'); body.classList.remove('wag'); void body.getBoundingClientRect(); body.classList.add('wag');
+    var h = '<div><div class="big">Mission complete</div>';
+    if(!isBuild()){
+      if(!S.progress[S.level] || S.progress[S.level]<st) S.progress[S.level] = st;
+      save(); renderMissions();
+      h += '<div class="stars" aria-label="'+st+' of 3 stars">' + '★★★'.slice(0,st) + '<s>' + '★★★'.slice(0,3-st) + '</s></div></div>';
+      h += '<p>You used ' + n + (n===1?' block':' blocks') + '.' + (st<3 ? ' Can you do it in ' + lv.par + '? Look for steps that repeat.' : ' Three stars. Nice flying, Captain.') + '</p>';
+      h += (S.level < LEVELS.length-1) ? '<button data-next="'+(S.level+1)+'">Next mission</button>' : '<button data-next="'+BUILD+'">Build your own</button>';
+    } else {
+      h += '</div><p>Your mission works in ' + n + (n===1?' block':' blocks') + '. Hand it to your co-pilot and see if they can beat that.</p><button data-clearplan="1">Clear the plan</button>';
+    }
+    showResult('win', h);
+  } else {
+    tone('fail');
+    if(res.path) markChip(res.path, 0, 'bad');
+    showResult('fail', failText(res));
+  }
+}
+
+/* ---------- builder ---------- */
+function buildTap(x,y){
+  if(!isBuild() || S.running) return;
+  var c = S.custom, onStart = (c.start.x===x && c.start.y===y), t = S.tool;
+  function wipe(){
+    c.animals = c.animals.filter(function(a){ return !(a.x===x && a.y===y); });
+    c.storms = c.storms.filter(function(a){ return !(a.x===x && a.y===y); });
+    if(c.land && c.land.x===x && c.land.y===y) c.land = null;
+  }
+  hideResult();
+  if(t==='plane'){
+    if(onStart) c.start.d = (c.start.d+1)%4;
+    else { wipe(); c.start = {x:x, y:y, d:c.start.d}; }
+  }
+  else if(t==='erase'){ wipe(); }
+  else if(t==='land'){ wipe(); c.land = {x:x, y:y}; }
+  else if(onStart){ showResult('warn','<p><b>The plane is parked there.</b> Pick Plane and move it first.</p>'); return; }
+  else if(t==='storm'){ wipe(); c.storms.push({x:x, y:y}); }
+  else { wipe(); c.animals.push({x:x, y:y, t:t}); }
+  audioInit(); tone('tap');
+  save(); renderBrief(); resetFlight();
+}
+
+/* ---------- events ---------- */
+function wire(){
+  $('#missions').addEventListener('click', function(e){
+    var b = e.target.closest('[data-level]'); if(b) gotoLevel(Number(b.getAttribute('data-level')));
+  });
+  $('#palette').addEventListener('click', function(e){
+    var b = e.target.closest('[data-cmd]'); if(b && !b.disabled) addCmd(b.getAttribute('data-cmd'));
+  });
+  $('#plan').addEventListener('click', function(e){
+    if(S.running) return;
+    var el;
+    if((el = e.target.closest('[data-step]'))){
+      var blk = S.program[Number(el.getAttribute('data-i'))];
+      blk.n = Math.max(2, Math.min(9, blk.n + Number(el.getAttribute('data-step'))));
+      hideResult(); renderProgram(); return;
+    }
+    if((el = e.target.closest('[data-del]'))){ removeAt(el.getAttribute('data-del')); return; }
+    if((el = e.target.closest('[data-done]'))){ S.target = -1; renderProgram(); return; }
+    if((el = e.target.closest('[data-path]'))){ removeAt(el.getAttribute('data-path')); return; }
+    if((el = e.target.closest('[data-open]'))){ S.target = Number(el.getAttribute('data-open')); renderProgram(); return; }
+    if((el = e.target.closest('[data-body]'))){ S.target = Number(el.getAttribute('data-body')); renderProgram(); return; }
+  });
+  $('#goBtn').addEventListener('click', fly);
+  $('#undoBtn').addEventListener('click', undo);
+  $('#clearBtn').addEventListener('click', function(){ if(S.running) return; S.program = []; S.target = -1; hideResult(); resetFlight(); renderProgram(); });
+  $('#result').addEventListener('click', function(e){
+    var b = e.target.closest('[data-next]');
+    if(b){ gotoLevel(Number(b.getAttribute('data-next'))); return; }
+    if(e.target.closest('[data-clearplan]')){ S.program = []; S.target = -1; hideResult(); resetFlight(); renderProgram(); }
+  });
+  $('#sayBtn').addEventListener('click', function(){ speak(cur().name + '. ' + cur().brief); });
+  if(!('speechSynthesis' in window)) $('#sayBtn').hidden = true;
+  $('#tools').addEventListener('click', function(e){
+    var b = e.target.closest('[data-tool]'); if(!b) return;
+    S.tool = b.getAttribute('data-tool'); renderBrief();
+  });
+  $('#hits').addEventListener('click', function(e){
+    var r = e.target.closest('.hit'); if(r) buildTap(Number(r.getAttribute('data-x')), Number(r.getAttribute('data-y')));
+  });
+  $('#hangarBtn').addEventListener('click', function(){
+    var hg = $('#hangar'); hg.hidden = !hg.hidden;
+    this.setAttribute('aria-expanded', String(!hg.hidden));
+  });
+  $('#swatches').addEventListener('click', function(e){
+    var b = e.target.closest('[data-paint]'); if(!b) return;
+    S.settings.paint = b.getAttribute('data-paint'); save(); renderHangar(); drawPlaneBody();
+  });
+  $('#speed').addEventListener('input', function(){ S.settings.speed = Number(this.value); save(); renderHangar(); });
+  $('#size').addEventListener('input', function(){
+    S.settings.size = Number(this.value); save(); renderHangar();
+    if(!S.running){ var lv = cur(); placePlane(lv.start.x, lv.start.y, lv.start.d*90, true); }
+  });
+  $('#trail').addEventListener('change', function(){ S.settings.trail = this.checked; save(); if(!this.checked) drawTrail([]); });
+  $('#sound').addEventListener('change', function(){ S.settings.sound = this.checked; save(); if(this.checked){ audioInit(); tone('fed'); } });
+}
+
+function start(seed){
+  load(seed);
+  drawStatic(); wire(); renderAll();
+  try{
+    if(window.claude && window.claude.hot && window.claude.hot.snapshot){
+      window.claude.hot.snapshot(function(){
+        return {level:S.level, program:S.program, progress:S.progress, settings:S.settings, custom:S.custom};
+      });
+    }
+  }catch(e){}
+}
+if(window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start);
+else start((window.claude && window.claude.hot && window.claude.hot.data) || {});
+})();
+</script>
+</body>
+</html>

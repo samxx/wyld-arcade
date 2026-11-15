@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oliver's Dart Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Lexend:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* layout: a foam-arena floor plan on the left, a mission control panel on the right; stacks to one column under 900px */
+  color-scheme: light;
+  --page:#FFF4DE;
+  --panel:#FFFFFF;
+  --ink:#1C2430;
+  --ink-soft:#5A6475;
+  --floor:#33465C;
+  --orange:#FF6A13;
+  --blue:#1C78D4;
+  --yellow:#FFD23F;
+  --purple:#7A3EE0;
+  --teal:#0E9F8E;
+  --lava:#E5452B;
+  --good:#2E9E4F;
+  --display:'Bungee','Arial Black',Impact,sans-serif;
+  --body:'Lexend','Trebuchet MS',Verdana,sans-serif;
+  --step:480ms;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--page);color:var(--ink);font-family:var(--body);font-size:17px;line-height:1.4;display:flex;flex-direction:column;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+button:focus-visible,input:focus-visible{outline:3px solid var(--orange);outline-offset:2px}
+
+.bar{display:flex;align-items:center;gap:16px;padding:10px 16px;border-bottom:3px solid var(--ink);background:var(--panel)}
+h1{font-family:var(--display);font-weight:400;font-size:clamp(20px,2.4vw,28px);margin:0;white-space:nowrap;color:var(--ink)}
+h1 span{color:var(--orange)}
+.missions{flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;padding:4px 2px}
+.wp{flex:none;min-width:52px;height:52px;padding:2px 8px;border:3px solid var(--ink);border-radius:12px;background:var(--panel);display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1}
+.wp b{font-family:var(--display);font-weight:400;font-size:19px}
+.wp i{font-style:normal;font-size:10px;letter-spacing:1px;color:var(--orange);height:11px}
+.wp[aria-current="true"]{background:var(--ink);color:#fff}
+.wp[aria-current="true"] i{color:var(--yellow)}
+.wp.build{border-style:dashed;padding:2px 12px}
+.wp.build b{font-size:15px}
+.tool-btn{flex:none;height:46px;padding:0 14px;border:3px solid var(--ink);border-radius:12px;background:var(--panel);font-weight:700}
+.tool-btn[aria-expanded="true"]{background:var(--ink);color:#fff}
+
+main{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1.3fr) minmax(330px,1fr);gap:16px;padding:16px}
+.arena{min-height:0;min-width:0;display:flex;align-items:center;justify-content:center}
+#map{width:100%;height:100%;display:block}
+.panel{min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:12px;padding-right:2px}
+.card{background:var(--panel);border:3px solid var(--ink);border-radius:14px;padding:12px 14px}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 4px}
+.brief-row{display:flex;gap:10px;align-items:flex-start}
+.brief-row h2{font-family:var(--display);font-weight:400;font-size:23px;margin:0 0 4px;text-wrap:balance}
+.brief-row p{margin:0;max-width:46ch}
+.say{flex:none;width:48px;height:48px;border:3px solid var(--ink);border-radius:50%;background:var(--panel);display:grid;place-items:center}
+.say svg{width:24px;height:24px;fill:var(--ink)}
+.goals{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.goal{font-size:13px;font-weight:600;border:2px solid var(--blue);color:var(--blue);border-radius:999px;padding:3px 10px;background:#fff}
+.goal.darts{border-color:var(--orange);color:#fff;background:var(--orange);font-variant-numeric:tabular-nums}
+.goal.darts.zero{background:#fff;color:var(--orange)}
+
+.tools{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+.tools button{min-width:52px;height:52px;border:3px solid var(--ink);border-radius:10px;background:#fff;font-size:24px;padding:0 8px}
+.tools button span{font-size:13px;font-weight:700}
+.tools button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.dart-set{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:14px;margin-left:4px}
+.dart-set button{min-width:40px;height:40px;font-size:20px}
+.dart-set output{min-width:24px;text-align:center;font-variant-numeric:tabular-nums}
+
+.palette{display:flex;flex-wrap:wrap;gap:10px}
+.cmd,.chip{display:inline-flex;align-items:center;gap:8px;border:3px solid var(--ink);border-radius:12px;font-weight:700;color:#fff;box-shadow:0 4px 0 var(--ink)}
+.cmd{height:58px;padding:0 16px;font-size:18px}
+.cmd:active{transform:translateY(4px);box-shadow:none}
+.cmd:disabled{opacity:.4;cursor:not-allowed}
+.cmd svg,.chip svg,.box-title svg{width:22px;height:22px;fill:currentColor;flex:none}
+.c-F{background:var(--blue)}
+.c-L,.c-R{background:var(--ink)}
+.c-S{background:var(--orange)}
+.c-REP{background:var(--purple)}
+.c-IF{background:var(--teal)}
+.cmd.new{position:relative}
+.cmd.new::after{content:'NEW';position:absolute;top:-10px;right:-8px;background:var(--yellow);color:var(--ink);border:2px solid var(--ink);border-radius:6px;font-size:11px;padding:1px 5px}
+
+.plan-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.count{font-size:13px;font-weight:600;color:var(--ink-soft);font-variant-numeric:tabular-nums}
+.plan{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;min-height:60px;margin-top:8px}
+.plan.locked{pointer-events:none}
+.chip{height:46px;padding:0 12px;font-size:15px;box-shadow:0 3px 0 var(--ink)}
+.chip.now,.box.now{outline:4px solid var(--yellow);outline-offset:2px}
+.chip.bad,.box.bad{outline:4px solid var(--lava);outline-offset:2px}
+.slot{display:inline-flex;align-items:center;justify-content:center;height:46px;min-width:46px;padding:0 10px;border:2px dashed var(--ink-soft);border-radius:10px;background:transparent;color:var(--ink-soft);font-size:14px}
+.slot.here{border-color:var(--orange);color:var(--orange);animation:pulse 1.2s ease-in-out infinite}
+.box{border:3px solid var(--purple);border-radius:14px;background:rgba(122,62,224,.07);padding:6px;display:flex;flex-direction:column;gap:6px;max-width:100%}
+.box.b-IF{border-color:var(--teal);background:rgba(14,159,142,.08)}
+.box.target{box-shadow:0 0 0 4px rgba(255,106,19,.35)}
+.box-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.box-title{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--purple)}
+.b-IF>.box-head .box-title{color:var(--teal)}
+.step{width:40px;height:40px;border:3px solid var(--purple);border-radius:8px;background:#fff;color:var(--purple);font-weight:700;font-size:22px;line-height:1}
+.times{font-weight:700;font-size:20px;min-width:34px;text-align:center;font-variant-numeric:tabular-nums}
+.lap{font-size:12px;font-weight:600;color:var(--purple)}
+.verdict{font-size:12px;font-weight:700;border-radius:6px;padding:2px 6px}
+.verdict.yes{background:var(--teal);color:#fff}
+.verdict.no{background:#E7E9EE;color:var(--ink-soft)}
+.box-x{margin-left:auto;width:36px;height:36px;border:0;background:transparent;color:var(--ink-soft);font-size:18px}
+.box-body{display:flex;flex-wrap:wrap;gap:6px;align-items:center;min-height:46px}
+.done{height:46px;padding:0 12px;border:3px solid var(--ink);border-radius:10px;background:var(--yellow);color:var(--ink);font-weight:700;font-size:14px}
+.empty{color:var(--ink-soft);font-size:15px;align-self:center}
+
+.controls{display:flex;gap:10px;flex-wrap:wrap}
+.go{flex:1;min-width:160px;height:64px;border:3px solid var(--ink);border-radius:14px;background:var(--good);color:#fff;font-family:var(--display);font-size:26px;box-shadow:0 5px 0 var(--ink)}
+.go:active{transform:translateY(5px);box-shadow:none}
+.go.stop{background:var(--lava)}
+.minor{height:64px;padding:0 16px;border:3px solid var(--ink);border-radius:14px;background:var(--panel);font-weight:700}
+.minor:disabled{opacity:.4}
+
+.result{border:3px solid var(--ink);border-radius:14px;padding:12px 14px;background:#fff;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.result[hidden]{display:none}
+.result.win{background:var(--ink);color:#fff}
+.result.win .stars{font-size:30px;letter-spacing:4px;color:var(--yellow)}
+.result.win .stars s{text-decoration:none;color:rgba(255,255,255,.25)}
+.result .big{font-family:var(--display);font-size:22px}
+.result p{margin:0;flex:1;min-width:180px}
+.result button{height:48px;padding:0 16px;border:3px solid currentColor;border-radius:10px;background:var(--yellow);color:var(--ink);font-weight:700}
+
+.armory{position:absolute;right:16px;top:74px;z-index:5;width:min(340px,calc(100% - 32px));box-shadow:6px 6px 0 var(--ink)}
+.armory[hidden]{display:none}
+.armory h3{font-family:var(--display);font-weight:400;font-size:20px;margin:0 0 8px}
+.row{display:grid;grid-template-columns:100px 1fr 50px;align-items:center;gap:10px;min-height:44px}
+.row label{font-weight:700;font-size:15px}
+.row output{font-size:13px;font-weight:600;text-align:right}
+.row input[type=range]{width:100%;accent-color:var(--orange)}
+.row input[type=checkbox]{width:24px;height:24px;accent-color:var(--orange)}
+.swatches{display:flex;gap:8px;grid-column:2 / 4}
+.swatches button{width:36px;height:36px;border-radius:50%;border:3px solid var(--ink)}
+.swatches button[aria-pressed="true"]{outline:3px solid var(--orange);outline-offset:2px}
+.hint{font-size:13px;color:var(--ink-soft);margin:8px 0 0}
+
+#map text{user-select:none}
+#player{transition:transform var(--step) ease-in-out}
+#playerBody.shake{animation:shake .35s linear}
+#playerBody.spin{animation:spin .9s ease-in-out}
+#dart{opacity:0}
+.tgt .em{transition:transform .3s ease-out, opacity .3s}
+.tgt.down .em{transform:rotate(85deg) translateY(10px);opacity:.35}
+.ammo.taken{opacity:.15}
+.hit{fill:transparent;pointer-events:none}
+.building .hit{pointer-events:all;cursor:pointer}
+.building .hit:hover{fill:rgba(255,210,63,.18)}
+.pop{animation:pop .35s ease-out}
+.fade{animation:fade 1s ease-out forwards}
+@keyframes pulse{50%{opacity:.45}}
+@keyframes shake{25%{transform:translate(-7px,0)}50%{transform:translate(7px,0)}75%{transform:translate(-5px,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pop{0%{opacity:0;transform:scale(.3)}70%{transform:scale(1.25)}100%{opacity:1;transform:scale(1)}}
+@keyframes fade{0%{opacity:0;transform:scale(.4)}25%{opacity:1;transform:scale(1.2)}70%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1)}}
+.pop,.fade,#playerBody,.tgt .em{transform-box:fill-box;transform-origin:center}
+
+@media (max-width:900px){
+  body{display:block;height:auto;min-height:100%}
+  .bar{flex-wrap:wrap}
+  .missions{order:3;flex-basis:100%}
+  main{display:flex;flex-direction:column}
+  #map{height:auto}
+  .panel{overflow:visible}
+  .armory{top:124px}
+}
+@media (prefers-reduced-motion:reduce){
+  .slot.here,#playerBody.shake,#playerBody.spin,.pop,.fade{animation:none}
+}
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <h1>Dart <span>Ops</span></h1>
+  <nav class="missions" id="missions" aria-label="Missions"></nav>
+  <button class="tool-btn" id="armoryBtn" aria-expanded="false" aria-controls="armory">Armory</button>
+</header>
+
+<section class="card armory" id="armory" hidden aria-label="Armory settings">
+  <h3>Armory</h3>
+  <div class="row"><label id="colorLabel">Gear color</label><div class="swatches" id="swatches" role="group" aria-labelledby="colorLabel"></div></div>
+  <div class="row"><label for="speed">Speed</label><input type="range" id="speed" min="1" max="3" step="1"><output id="speedOut" for="speed"></output></div>
+  <div class="row"><label for="laserOpt">Laser sight</label><input type="checkbox" id="laserOpt"><span></span></div>
+  <div class="row"><label for="sound">Sound</label><input type="checkbox" id="sound"><span></span></div>
+  <p class="hint">The laser sight shows where your dart will fly. Turn it off for a challenge.</p>
+</section>
+
+<main>
+  <div class="arena">
+    <svg id="map" viewBox="-36 -36 672 578" role="img" aria-label="Foam arena with your blaster, targets, crates, lava and the flag">
+      <defs>
+        <pattern id="lavaPat" width="40" height="20" patternUnits="userSpaceOnUse">
+          <rect width="40" height="20" fill="#E5452B"/>
+          <path d="M0 14 Q10 6 20 14 T40 14" fill="none" stroke="#FF9A3D" stroke-width="4"/>
+        </pattern>
+      </defs>
+      <rect x="-6" y="-6" width="612" height="512" rx="10" fill="#1C2430"/>
+      <rect x="0" y="0" width="600" height="500" fill="#33465C"/>
+      <g id="floor"></g>
+      <g id="labels"></g>
+      <g id="features"></g>
+      <line id="laser" x1="0" y1="0" x2="0" y2="0" stroke="#FF3B2F" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 10" opacity=".85"/>
+      <g id="fx"></g>
+      <g id="player"><g id="playerBody"></g></g>
+      <g id="dart"><rect x="-4" y="-14" width="8" height="24" rx="3" fill="#FF6A13" stroke="#1C2430" stroke-width="2"/><rect x="-5" y="-20" width="10" height="9" rx="4" fill="#1C78D4" stroke="#1C2430" stroke-width="2"/></g>
+      <g id="hits"></g>
+      <text x="300" y="528" text-anchor="middle" font-size="12" letter-spacing="2" fill="#5A6475" font-family="Lexend, sans-serif" font-weight="600">MEEK FOAM ARENA · SAFETY GLASSES ON</text>
+    </svg>
+  </div>
+
+  <div class="panel">
+    <section class="card" aria-labelledby="briefTitle">
+      <p class="eyebrow" id="briefEyebrow"></p>
+      <div class="brief-row">
+        <div style="flex:1;min-width:0">
+          <h2 id="briefTitle"></h2>
+          <p id="briefText"></p>
+        </div>
+        <button class="say" id="sayBtn" aria-label="Read the mission out loud">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3a4.5 4.5 0 00-2.5-4v8a4.5 4.5 0 002.5-4zM14 3.2v2.1a7 7 0 010 13.4v2.1a9 9 0 000-17.6z"/></svg>
+        </button>
+      </div>
+      <div class="goals" id="goals"></div>
+      <div class="tools" id="tools" hidden role="group" aria-label="Map builder tools"></div>
+    </section>
+
+    <section class="card" aria-labelledby="cmdTitle">
+      <p class="eyebrow" id="cmdTitle">Commands · tap to add</p>
+      <div class="palette" id="palette"></div>
+    </section>
+
+    <section class="card" aria-labelledby="planTitle">
+      <div class="plan-head">
+        <p class="eyebrow" id="planTitle">Battle plan · tap a block to remove it</p>
+        <span class="count" id="count"></span>
+      </div>
+      <div class="plan" id="plan"></div>
+    </section>
+
+    <div class="controls">
+      <button class="go" id="goBtn">GO!</button>
+      <button class="minor" id="undoBtn">Undo</button>
+      <button class="minor" id="clearBtn">Clear</button>
+    </div>
+
+    <div class="result" id="result" role="status" aria-live="polite" hidden></div>
+  </div>
+</main>
+
+<script>
+(function(){
+'use strict';
+
+/*LOGIC-START*/
+var W = 6, H = 5;
+var DIRS = [[0,-1],[1,0],[0,1],[-1,0]]; // N E S W
+var CONTAINERS = {REP:1, IF:1};
+var LEVELS = [
+  { name:'First shot', brief:'A target is straight ahead. Tap Shoot, then press GO.',
+    start:{x:0,y:2,d:1}, targets:[{x:4,y:2,t:'target'}], crates:[], lava:[], ammo:[], base:null, darts:3, pal:['F','S'], par:1 },
+  { name:'Line it up', brief:'Darts only fly straight. Walk until the can is in line with you, turn to face it, then shoot.',
+    start:{x:1,y:4,d:0}, targets:[{x:4,y:1,t:'can'}], crates:[], lava:[], ammo:[], base:null, darts:3, pal:['F','L','R','S'], par:5 },
+  { name:'Take cover', brief:'The robot is hiding behind a crate. Darts cannot go through crates. Find another angle.',
+    start:{x:0,y:1,d:1}, targets:[{x:3,y:1,t:'robot'}], crates:[{x:2,y:1}], lava:[], ammo:[], base:null, darts:3, pal:['F','L','R','S'], par:8 },
+  { name:'Floor is lava', brief:'Darts fly over lava, but you cannot walk on it. Pop the balloon, then get to the flag.',
+    start:{x:0,y:4,d:1}, targets:[{x:5,y:4,t:'balloon'}], crates:[], lava:[{x:1,y:4},{x:2,y:4},{x:3,y:4},{x:2,y:3},{x:3,y:3}], ammo:[], base:{x:4,y:2}, darts:2, pal:['F','L','R','S'], par:9 },
+  { name:'Shooting gallery', brief:'Five targets in a row. Find the moves that repeat and put them inside one Repeat.',
+    start:{x:0,y:2,d:1}, targets:[{x:0,y:1,t:'can'},{x:1,y:1,t:'target'},{x:2,y:1,t:'can'},{x:3,y:1,t:'target'},{x:4,y:1,t:'can'}], crates:[], lava:[], ammo:[], base:null, darts:5, pal:['F','L','R','S','REP'], par:5 },
+  { name:'Supply drop', brief:'Your blaster is empty. Walk onto the ammo box to reload, knock down all three robots, then reach the flag.',
+    start:{x:0,y:4,d:1}, targets:[{x:2,y:0,t:'robot'},{x:2,y:1,t:'robot'},{x:2,y:2,t:'robot'}], crates:[], lava:[], ammo:[{x:2,y:4,n:3}], base:{x:5,y:4}, darts:0, pal:['F','L','R','S','REP'], par:8 },
+  { name:'Spin move', brief:'Targets on every side! Shoot and turn, shoot and turn. Then walk to the flag.',
+    start:{x:2,y:2,d:0}, targets:[{x:2,y:0,t:'target'},{x:5,y:2,t:'can'},{x:2,y:4,t:'balloon'},{x:0,y:2,t:'robot'}], crates:[{x:0,y:0},{x:5,y:4}], lava:[], ammo:[], base:{x:2,y:0}, darts:4, pal:['F','L','R','S','REP'], par:5 },
+  { name:'Peek first', brief:'Only 3 darts! New block: If target. Whatever you put inside it only happens when a target is in your sights.',
+    start:{x:0,y:2,d:1}, targets:[{x:1,y:1,t:'robot'},{x:3,y:1,t:'alien'},{x:4,y:1,t:'robot'}], crates:[{x:2,y:1},{x:5,y:0}], lava:[], ammo:[], base:null, darts:3, pal:['F','L','R','S','REP','IF'], par:6 },
+  { name:'Ambush alley', brief:'Targets on both sides of the hallway, and just enough darts. Peek left, peek right, every step.',
+    start:{x:0,y:2,d:1}, targets:[{x:1,y:1,t:'alien'},{x:4,y:1,t:'robot'},{x:2,y:3,t:'can'},{x:3,y:3,t:'balloon'},{x:5,y:3,t:'target'}], crates:[], lava:[], ammo:[], base:{x:5,y:2}, darts:5, pal:['F','L','R','S','REP','IF'], par:10 },
+  { name:'The fortress', brief:'The final mission. Grab the ammo, sweep the bottom wall, then sweep up the right wall to the flag. Two Repeats, two Ifs.',
+    start:{x:0,y:4,d:1}, targets:[{x:1,y:1,t:'robot'},{x:3,y:2,t:'alien'},{x:3,y:1,t:'can'},{x:2,y:0,t:'target'}], crates:[{x:2,y:2},{x:4,y:3}], lava:[{x:2,y:3},{x:3,y:3}], ammo:[{x:1,y:4,n:4}], base:{x:5,y:0}, darts:0, pal:['F','L','R','S','REP','IF'], par:13 }
+];
+
+function countBlocks(list){
+  return list.reduce(function(n,b){ return n + 1 + (CONTAINERS[b.t] ? countBlocks(b.kids) : 0); }, 0);
+}
+function findAt(arr,x,y){ for(var i=0;i<arr.length;i++) if(arr[i].x===x && arr[i].y===y) return i; return -1; }
+function standingAt(lv,down,x,y){ for(var i=0;i<lv.targets.length;i++){ var t=lv.targets[i]; if(t.x===x && t.y===y && !down[i]) return i; } return -1; }
+// what a dart fired from (x,y) facing d would hit first; end is in cell units (cell centre = x+0.5)
+function ray(lv,x,y,d,down){
+  var dx = DIRS[d][0], dy = DIRS[d][1], cx = x, cy = y;
+  while(true){
+    var nx = cx+dx, ny = cy+dy;
+    if(nx<0||ny<0||nx>=W||ny>=H) return {kind:'wall', end:{x:cx+.5+dx*.5, y:cy+.5+dy*.5}};
+    if(findAt(lv.crates,nx,ny)>=0) return {kind:'crate', end:{x:nx+.5-dx*.4, y:ny+.5-dy*.4}};
+    var t = standingAt(lv,down,nx,ny);
+    if(t>=0) return {kind:'target', idx:t, end:{x:nx+.5-dx*.15, y:ny+.5-dy*.15}};
+    cx = nx; cy = ny;
+  }
+}
+function copy(o){ var r={}; for(var k in o) r[k]=o[k]; return r; }
+function simulate(lv,prog){
+  var st = {x:lv.start.x, y:lv.start.y, d:lv.start.d, darts:lv.darts||0, down:{}, taken:{}};
+  var frames = [], fail = null, steps = 0, LIMIT = 400;
+  function push(fr){ fr.x=st.x; fr.y=st.y; fr.d=st.d; fr.darts=st.darts; fr.down=copy(st.down); frames.push(fr); steps++; }
+  function run(list, prefix, laps){
+    for(var i=0;i<list.length;i++){
+      if(fail || steps>=LIMIT) return;
+      var b = list[i], path = prefix ? prefix+'.'+i : ''+i;
+      if(b.t==='REP'){
+        for(var n=1;n<=b.n;n++){ var l2 = copy(laps); l2[path]=n; run(b.kids, path, l2); if(fail || steps>=LIMIT) return; }
+        continue;
+      }
+      if(b.t==='IF'){
+        var seen = ray(lv,st.x,st.y,st.d,st.down);
+        var yes = seen.kind==='target';
+        push({c:'IF', path:path, laps:laps, yes:yes});
+        if(yes) run(b.kids, path, laps);
+        continue;
+      }
+      var fr = {c:b.t, path:path, laps:laps, turn:0, ev:null};
+      if(b.t==='L'){ st.d=(st.d+3)%4; fr.turn=-1; }
+      else if(b.t==='R'){ st.d=(st.d+1)%4; fr.turn=1; }
+      else if(b.t==='F'){
+        var nx = st.x+DIRS[st.d][0], ny = st.y+DIRS[st.d][1];
+        if(nx<0||ny<0||nx>=W||ny>=H){ fr.ev='edge'; }
+        else if(findAt(lv.crates,nx,ny)>=0){ fr.ev='crate'; }
+        else if(standingAt(lv,st.down,nx,ny)>=0){ fr.ev='bump'; }
+        else {
+          st.x=nx; st.y=ny;
+          if(findAt(lv.lava,nx,ny)>=0) fr.ev='lava';
+          else { var a = findAt(lv.ammo,nx,ny); if(a>=0 && !st.taken[a]){ st.taken[a]=true; st.darts += lv.ammo[a].n; fr.ev='ammo'; fr.ammoIdx=a; fr.gain=lv.ammo[a].n; } }
+        }
+        if(fr.ev==='edge'||fr.ev==='crate'||fr.ev==='bump'||fr.ev==='lava') fail = {why:fr.ev, path:path};
+      }
+      else if(b.t==='S'){
+        if(st.darts<=0){ fr.ev='empty'; fail = {why:'empty', path:path}; }
+        else {
+          st.darts--;
+          var r = ray(lv,st.x,st.y,st.d,st.down);
+          fr.end = r.end;
+          if(r.kind==='target'){ st.down[r.idx]=true; fr.ev='hit'; fr.hitIdx=r.idx; } else fr.ev='miss';
+        }
+      }
+      push(fr);
+    }
+  }
+  run(prog, '', {});
+  var result;
+  if(fail) result = {ok:false, why:fail.why, path:fail.path};
+  else {
+    var left = 0; for(var i=0;i<lv.targets.length;i++) if(!st.down[i]) left++;
+    if(left>0) result = {ok:false, why:'targets', left:left};
+    else if(lv.base && !(st.x===lv.base.x && st.y===lv.base.y)) result = {ok:false, why:'base'};
+    else result = {ok:true};
+  }
+  return {frames:frames, result:result};
+}
+function starsFor(lv,prog){
+  if(!lv.par) return 3;
+  var n = countBlocks(prog);
+  return n<=lv.par ? 3 : (n<=lv.par+2 ? 2 : 1);
+}
+/*LOGIC-END*/
+
+var NAME = {F:'Walk', L:'Left', R:'Right', S:'Shoot', REP:'Repeat', IF:'If target'};
+var ICON = {
+  F:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l8 10h-5v10H9V12H4z"/></svg>',
+  L:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 3L3 10l7 7v-4h4a3 3 0 013 3v5h4v-5a7 7 0 00-7-7h-4z"/></svg>',
+  R:'<svg viewBox="0 0 24 24" aria-hidden="true"><path transform="translate(24,0) scale(-1,1)" d="M10 3L3 10l7 7v-4h4a3 3 0 013 3v5h4v-5a7 7 0 00-7-7h-4z"/></svg>',
+  S:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 10.5h13v3H1z"/><path d="M13 7h5a5 5 0 010 10h-5z"/><path d="M3 8l-2 2.5M3 16l-2-2.5" stroke="currentColor" stroke-width="2"/></svg>',
+  REP:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 1l5 5-5 5V8H8a3 3 0 00-3 3v1H2v-1a6 6 0 016-6h9z"/><path d="M7 23l-5-5 5-5v3h9a3 3 0 003-3v-1h3v1a6 6 0 01-6 6H7z"/></svg>',
+  IF:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5" fill="none" stroke="currentColor" stroke-width="2.6"/><circle cx="12" cy="12" r="2.6"/><path d="M12 1v5M12 18v5M1 12h5M18 12h5" stroke="currentColor" stroke-width="2.6"/></svg>'
+};
+var EMOJI = {target:'🎯', can:'🥫', balloon:'🎈', robot:'🤖', alien:'👾'};
+var PAINTS = ['#FF6A13','#1C78D4','#2E9E4F','#7A3EE0','#E5452B'];
+var SPEED_MS = {1:780, 2:480, 3:250};
+var SPEED_WORD = {1:'slow', 2:'normal', 3:'fast'};
+var KEY = 'oliver-dart-ops-v1';
+var BUILD = LEVELS.length;
+var FIRST_SEEN = {REP:4, IF:7};
+
+var S = {
+  level:0, program:[], target:'', running:false, tool:'target',
+  progress:{},
+  settings:{paint:PAINTS[0], speed:2, laser:true, sound:true},
+  custom:{ name:'My mission', brief:'You are the mission planner. Set up the arena, then hand it to your teammate.',
+           start:{x:0,y:4,d:0}, targets:[{x:3,y:1,t:'robot'}], crates:[{x:2,y:2}], lava:[], ammo:[], base:{x:5,y:0}, darts:5,
+           pal:['F','L','R','S','REP','IF'], par:0 }
+};
+var runId = 0;
+
+function $(s){ return document.querySelector(s); }
+function cur(){ return S.level===BUILD ? S.custom : LEVELS[S.level]; }
+function isBuild(){ return S.level===BUILD; }
+function center(x,y){ return [x*100+50, y*100+50]; }
+function sleep(ms){ return new Promise(function(r){ setTimeout(r,ms); }); }
+function idOf(p){ return String(p).replace(/\./g,'_'); }
+
+/* ---------- saving ---------- */
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify({level:S.level, progress:S.progress, settings:S.settings, custom:S.custom})); }catch(e){}
+}
+function load(seed){
+  var d = null;
+  if(seed && seed.settings) d = seed;
+  else { try{ d = JSON.parse(localStorage.getItem(KEY) || 'null'); }catch(e){ d = null; } }
+  if(!d) return;
+  if(typeof d.level==='number' && d.level>=0 && d.level<=BUILD) S.level = d.level;
+  if(d.progress) S.progress = d.progress;
+  if(d.settings) Object.keys(S.settings).forEach(function(k){ if(k in d.settings) S.settings[k] = d.settings[k]; });
+  if(d.custom && d.custom.start && d.custom.targets) S.custom = d.custom;
+  if(Array.isArray(d.program)) S.program = d.program;
+}
+
+/* ---------- sound and speech ---------- */
+var actx = null;
+function audioInit(){
+  if(actx || !S.settings.sound) return;
+  try{ var AC = window.AudioContext || window.webkitAudioContext; if(AC) actx = new AC(); }catch(e){ actx = null; }
+}
+function beep(freq, dur, type, when, gain, slideTo){
+  if(!actx || !S.settings.sound) return;
+  try{
+    var t = actx.currentTime + (when||0), o = actx.createOscillator(), g = actx.createGain();
+    o.type = type || 'triangle'; o.frequency.setValueAtTime(freq, t);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t+dur);
+    g.gain.setValueAtTime(gain || 0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t+dur);
+    o.connect(g); g.connect(actx.destination); o.start(t); o.stop(t+dur+0.02);
+  }catch(e){}
+}
+function tone(kind){
+  if(kind==='walk') beep(200,0.08,'square',0,0.025);
+  else if(kind==='turn') beep(520,0.06,'square',0,0.03);
+  else if(kind==='pew') beep(900,0.18,'square',0,0.04,180);
+  else if(kind==='hit'){ beep(160,0.12,'sawtooth',0,0.07); beep(660,0.1,'triangle',0.1); beep(990,0.16,'triangle',0.18); }
+  else if(kind==='thud') beep(110,0.12,'sine',0,0.1);
+  else if(kind==='ammo'){ beep(520,0.08); beep(780,0.08,'triangle',0.08); beep(1040,0.12,'triangle',0.16); }
+  else if(kind==='yes') beep(880,0.1,'sine',0,0.05);
+  else if(kind==='no') beep(330,0.1,'sine',0,0.04);
+  else if(kind==='fail') beep(140,0.3,'sawtooth',0,0.06);
+  else if(kind==='win'){ [523,659,784,1047].forEach(function(f,i){ beep(f,0.2,'triangle',i*0.12); }); }
+  else if(kind==='tap') beep(440,0.04,'square',0,0.02);
+}
+function speak(text){
+  try{
+    if(!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    var u = new SpeechSynthesisUtterance(text); u.rate = 0.95;
+    window.speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+/* ---------- map ---------- */
+function drawStatic(){
+  var f = '', l = '', hts = '', i, j;
+  for(j=0;j<H;j++) for(i=0;i<W;i++){
+    f += '<rect x="'+(i*100+3)+'" y="'+(j*100+3)+'" width="94" height="94" rx="8" fill="'+((i+j)%2 ? '#3A4F67' : '#344860')+'"/>';
+  }
+  $('#floor').innerHTML = f;
+  for(i=0;i<W;i++) l += '<text x="'+(i*100+50)+'" y="-12" text-anchor="middle" font-size="18" font-weight="700" fill="#1C2430" font-family="Bungee, sans-serif">'+'ABCDEF'.charAt(i)+'</text>';
+  for(j=0;j<H;j++) l += '<text x="-20" y="'+(j*100+57)+'" text-anchor="middle" font-size="18" font-weight="700" fill="#1C2430" font-family="Bungee, sans-serif">'+(j+1)+'</text>';
+  $('#labels').innerHTML = l;
+  for(j=0;j<H;j++) for(i=0;i<W;i++) hts += '<rect class="hit" x="'+(i*100)+'" y="'+(j*100)+'" width="100" height="100" data-x="'+i+'" data-y="'+j+'"/>';
+  $('#hits').innerHTML = hts;
+}
+function drawPlayerBody(){
+  var p = S.settings.paint, ink = '#1C2430';
+  $('#playerBody').innerHTML =
+    '<ellipse cx="0" cy="6" rx="30" ry="22" fill="rgba(0,0,0,.25)"/>'+
+    '<ellipse cx="0" cy="4" rx="27" ry="18" fill="'+p+'" stroke="'+ink+'" stroke-width="3"/>'+
+    '<circle cx="-15" cy="-8" r="6" fill="#F3C39B" stroke="'+ink+'" stroke-width="2.5"/>'+
+    '<circle cx="15" cy="-8" r="6" fill="#F3C39B" stroke="'+ink+'" stroke-width="2.5"/>'+
+    '<rect x="-9" y="-50" width="18" height="40" rx="5" fill="#FFD23F" stroke="'+ink+'" stroke-width="3"/>'+
+    '<rect x="-6" y="-60" width="12" height="14" rx="3" fill="#1C78D4" stroke="'+ink+'" stroke-width="2.5"/>'+
+    '<rect x="-9" y="-34" width="18" height="6" fill="'+p+'"/>'+
+    '<circle cx="0" cy="-20" r="7" fill="'+p+'" stroke="'+ink+'" stroke-width="2.5"/>'+
+    '<circle cx="0" cy="8" r="14" fill="#5B3A22" stroke="'+ink+'" stroke-width="2.5"/>'+
+    '<path d="M-14 4 A14 14 0 0 1 14 4 L12 -1 L-12 -1 Z" fill="'+p+'" stroke="'+ink+'" stroke-width="2"/>'+
+    '<rect x="-12" y="-4" width="24" height="5" rx="2.5" fill="#1C2430" opacity=".85"/>';
+}
+function placePlayer(x,y,angle,instant){
+  var el = $('#player'), c = center(x,y);
+  if(instant) el.style.transition = 'none';
+  el.style.transform = 'translate('+c[0]+'px,'+c[1]+'px) rotate('+angle+'deg)';
+  if(instant){ el.getBoundingClientRect(); el.style.transition = ''; }
+}
+function crateSVG(x,y){
+  var a = x*100+12, b = y*100+12;
+  return '<g><rect x="'+a+'" y="'+b+'" width="76" height="76" rx="6" fill="#C98B4A" stroke="#5E3A1A" stroke-width="4"/>'+
+    '<rect x="'+(a+8)+'" y="'+(b+8)+'" width="60" height="60" fill="none" stroke="#8A5527" stroke-width="3"/>'+
+    '<line x1="'+(a+8)+'" y1="'+(b+8)+'" x2="'+(a+68)+'" y2="'+(b+68)+'" stroke="#8A5527" stroke-width="5"/>'+
+    '<line x1="'+(a+68)+'" y1="'+(b+8)+'" x2="'+(a+8)+'" y2="'+(b+68)+'" stroke="#8A5527" stroke-width="5"/></g>';
+}
+function drawFeatures(){
+  var lv = cur(), f = '';
+  lv.lava.forEach(function(s){
+    f += '<g><rect x="'+(s.x*100+3)+'" y="'+(s.y*100+3)+'" width="94" height="94" rx="8" fill="url(#lavaPat)" stroke="#9E1F10" stroke-width="3"/>'+
+         '<text x="'+(s.x*100+50)+'" y="'+(s.y*100+60)+'" text-anchor="middle" font-size="26">🔥</text></g>';
+  });
+  if(lv.base){
+    var c = center(lv.base.x, lv.base.y);
+    f += '<g><circle cx="'+c[0]+'" cy="'+c[1]+'" r="42" fill="rgba(255,210,63,.18)" stroke="#FFD23F" stroke-width="5" stroke-dasharray="10 7"/>'+
+         '<text x="'+c[0]+'" y="'+(c[1]+17)+'" text-anchor="middle" font-size="46">🚩</text></g>';
+  }
+  lv.crates.forEach(function(s){ f += crateSVG(s.x,s.y); });
+  lv.ammo.forEach(function(a,i){
+    var x = a.x*100, y = a.y*100;
+    f += '<g class="ammo" id="am'+i+'"><rect x="'+(x+18)+'" y="'+(y+26)+'" width="64" height="48" rx="6" fill="#1C78D4" stroke="#1C2430" stroke-width="3"/>'+
+      '<rect x="'+(x+28)+'" y="'+(y+34)+'" width="7" height="24" rx="3" fill="#FF6A13"/><rect x="'+(x+40)+'" y="'+(y+34)+'" width="7" height="24" rx="3" fill="#FF6A13"/><rect x="'+(x+52)+'" y="'+(y+34)+'" width="7" height="24" rx="3" fill="#FF6A13"/>'+
+      '<text x="'+(x+72)+'" y="'+(y+68)+'" text-anchor="end" font-size="14" font-weight="700" fill="#fff" font-family="Lexend, sans-serif">+'+a.n+'</text></g>';
+  });
+  lv.targets.forEach(function(t,i){
+    var c = center(t.x,t.y);
+    f += '<g class="tgt" id="tg'+i+'"><circle cx="'+c[0]+'" cy="'+c[1]+'" r="40" fill="rgba(255,255,255,.08)"/>'+
+         '<text class="em" x="'+c[0]+'" y="'+(c[1]+18)+'" text-anchor="middle" font-size="52">'+(EMOJI[t.t]||'🎯')+'</text></g>';
+  });
+  $('#features').innerHTML = f;
+}
+function knock(i){
+  var g = $('#tg'+i); if(!g) return;
+  g.classList.add('down');
+  var t = cur().targets[i], c = center(t.x,t.y);
+  addFx('<g class="fade"><polygon points="'+burst(c[0],c[1]-6,46,26,10)+'" fill="#FFD23F" stroke="#1C2430" stroke-width="3"/>'+
+    '<text x="'+c[0]+'" y="'+c[1]+'" text-anchor="middle" font-family="Bungee, sans-serif" font-size="20" fill="#1C2430">POW</text></g>');
+  addFx('<g class="pop"><circle cx="'+(c[0]+30)+'" cy="'+(c[1]-30)+'" r="14" fill="#2E9E4F" stroke="#fff" stroke-width="2.5"/>'+
+    '<path d="M'+(c[0]+23)+' '+(c[1]-30)+' l5 5 l9 -10" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/></g>');
+}
+function burst(cx,cy,R,r,n){
+  var pts = [];
+  for(var k=0;k<n*2;k++){ var ang = Math.PI*k/n - Math.PI/2, rr = k%2 ? r : R; pts.push((cx+rr*Math.cos(ang)).toFixed(1)+','+(cy+rr*Math.sin(ang)).toFixed(1)); }
+  return pts.join(' ');
+}
+function addFx(html){
+  var g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.innerHTML = html; $('#fx').appendChild(g);
+}
+function stuckDart(end, angle){
+  var x = end.x*100, y = end.y*100;
+  addFx('<g transform="translate('+x+','+y+') rotate('+angle+')" opacity=".9"><rect x="-4" y="-6" width="8" height="22" rx="3" fill="#FF6A13" stroke="#1C2430" stroke-width="2"/><rect x="-5" y="-12" width="10" height="8" rx="4" fill="#1C78D4" stroke="#1C2430" stroke-width="2"/></g>');
+}
+function drawLaser(x,y,d,down){
+  var el = $('#laser');
+  if(!S.settings.laser){ el.setAttribute('opacity','0'); return; }
+  var r = ray(cur(),x,y,d,down||{}), c = center(x,y), dx = DIRS[d][0], dy = DIRS[d][1];
+  el.setAttribute('x1', c[0]+dx*58); el.setAttribute('y1', c[1]+dy*58);
+  el.setAttribute('x2', r.end.x*100); el.setAttribute('y2', r.end.y*100);
+  el.setAttribute('opacity', r.kind==='target' ? '.95' : '.45');
+  el.setAttribute('stroke', r.kind==='target' ? '#FF3B2F' : '#FFB199');
+}
+function hideLaser(){ $('#laser').setAttribute('opacity','0'); }
+function resetFlight(){
+  var lv = cur();
+  drawFeatures(); $('#fx').innerHTML = '';
+  $('#dart').style.transition = 'none'; $('#dart').style.opacity = '0';
+  $('#playerBody').classList.remove('shake','spin');
+  placePlayer(lv.start.x, lv.start.y, lv.start.d*90, true);
+  drawLaser(lv.start.x, lv.start.y, lv.start.d, {});
+  setDarts(lv.darts||0);
+  clearMarks();
+}
+function setDarts(n){
+  var h = $('#dartHud'); if(!h) return;
+  h.textContent = 'Darts: ' + n;
+  h.classList.toggle('zero', n<=0);
+}
+
+/* ---------- panel rendering ---------- */
+function starText(n){ return n ? '★★★'.slice(0,n) : ''; }
+function renderMissions(){
+  var h = '';
+  LEVELS.forEach(function(lv,i){
+    var st = S.progress[i] || 0;
+    h += '<button class="wp" data-level="'+i+'" aria-current="'+(S.level===i)+'" aria-label="Mission '+(i+1)+', '+lv.name+(st?', '+st+' stars':'')+'"><b>'+(i+1)+'</b><i>'+starText(st)+'</i></button>';
+  });
+  h += '<button class="wp build" data-level="'+BUILD+'" aria-current="'+(S.level===BUILD)+'"><b>BUILD</b><i></i></button>';
+  $('#missions').innerHTML = h;
+  var on = $('#missions [aria-current="true"]');
+  if(on && on.scrollIntoView){ try{ on.scrollIntoView({block:'nearest', inline:'nearest'}); }catch(e){} }
+}
+function renderBrief(){
+  var lv = cur(), g = '';
+  $('#briefEyebrow').textContent = isBuild() ? 'Mission builder' : 'Mission ' + (S.level+1) + ' of ' + LEVELS.length;
+  $('#briefTitle').textContent = lv.name;
+  $('#briefText').textContent = lv.brief;
+  g += '<span class="goal darts" id="dartHud"></span>';
+  if(lv.targets.length) g += '<span class="goal">Knock down ' + lv.targets.length + (lv.targets.length===1 ? ' target' : ' targets') + '</span>';
+  if(lv.base) g += '<span class="goal">Finish on the flag</span>';
+  if(lv.lava.length) g += '<span class="goal">Don\'t step in lava</span>';
+  if(lv.par) g += '<span class="goal">3 stars: ' + lv.par + ' blocks or fewer</span>';
+  $('#goals').innerHTML = g;
+  setDarts(lv.darts||0);
+  var tools = $('#tools');
+  tools.hidden = !isBuild();
+  $('#map').classList.toggle('building', isBuild());
+  if(isBuild()){
+    var list = [['player','<span>You</span>','Place yourself. Tap again to turn'],
+      ['target',EMOJI.target,'Target'],['robot',EMOJI.robot,'Robot'],['alien',EMOJI.alien,'Alien'],['balloon',EMOJI.balloon,'Balloon'],['can',EMOJI.can,'Can'],
+      ['crate','📦','Crate'],['lava','🔥','Lava'],['ammo','<span>Ammo</span>','Ammo box, gives 3 darts'],['base','🚩','Flag'],['erase','<span>Erase</span>','Erase']];
+    tools.innerHTML = list.map(function(t){
+      return '<button data-tool="'+t[0]+'" aria-pressed="'+(S.tool===t[0])+'" aria-label="'+t[2]+'">'+t[1]+'</button>';
+    }).join('') + '<span class="dart-set">Start darts <button data-darts="-1" aria-label="Fewer darts">−</button><output>'+lv.darts+'</output><button data-darts="1" aria-label="More darts">+</button></span>';
+  }
+}
+function depthOf(p){ return p==='' ? 0 : String(p).split('.').length; }
+function renderPalette(){
+  var lv = cur(), deep = depthOf(S.target) >= 2;
+  $('#palette').innerHTML = lv.pal.map(function(t){
+    var off = (CONTAINERS[t] && deep) || S.running;
+    var isNew = !isBuild() && FIRST_SEEN[t]===S.level;
+    return '<button class="cmd c-'+t+(isNew?' new':'')+'" data-cmd="'+t+'"'+(off?' disabled':'')+'>'+ICON[t]+NAME[t]+'</button>';
+  }).join('');
+}
+function renderList(list, prefix){
+  var h = '';
+  list.forEach(function(b,i){
+    var p = prefix==='' ? ''+i : prefix+'.'+i;
+    if(CONTAINERS[b.t]){
+      var tgt = S.target===p;
+      h += '<div class="box b-'+b.t+(tgt?' target':'')+'" data-c="'+p+'"><div class="box-head">';
+      if(b.t==='REP'){
+        h += '<span class="box-title">'+ICON.REP+'Repeat</span>'+
+          '<button class="step" data-step="-1" data-p="'+p+'" aria-label="Repeat fewer times">−</button>'+
+          '<span class="times" aria-label="'+b.n+' times">×'+b.n+'</span>'+
+          '<button class="step" data-step="1" data-p="'+p+'" aria-label="Repeat more times">+</button>'+
+          '<span class="lap" id="lap-'+idOf(p)+'"></span>';
+      } else {
+        h += '<span class="box-title">'+ICON.IF+'If target ahead</span><span id="ver-'+idOf(p)+'"></span>';
+      }
+      h += '<button class="box-x" data-del="'+p+'" aria-label="Remove this block">✕</button></div>'+
+        '<div class="box-body" data-body="'+p+'">'+ renderList(b.kids, p) +
+        (tgt ? '<span class="slot here" aria-hidden="true">next block goes here</span><button class="done" data-done="1">Done</button>'
+             : '<button class="slot" data-open="'+p+'" aria-label="Add blocks inside">+</button>')+
+        '</div></div>';
+    } else {
+      h += '<button class="chip c-'+b.t+'" data-path="'+p+'" aria-label="'+NAME[b.t]+'. Tap to remove">'+ICON[b.t]+NAME[b.t]+'</button>';
+    }
+  });
+  return h;
+}
+function renderProgram(){
+  var h = renderList(S.program, '');
+  if(!S.program.length) h += '<span class="empty">Tap a command above to start your battle plan.</span>';
+  else if(S.target==='' && !S.running) h += '<span class="slot here" aria-hidden="true">next</span>';
+  var plan = $('#plan');
+  plan.innerHTML = h;
+  plan.classList.toggle('locked', S.running);
+  var n = countBlocks(S.program), lv = cur();
+  $('#count').textContent = n + (n===1 ? ' block' : ' blocks') + (lv.par ? ' · par ' + lv.par : '');
+  $('#undoBtn').disabled = S.running || !n;
+  $('#clearBtn').disabled = S.running || !n;
+  var go = $('#goBtn');
+  go.textContent = S.running ? 'STOP' : 'GO!';
+  go.classList.toggle('stop', S.running);
+  renderPalette();
+}
+function clearMarks(){
+  var els = document.querySelectorAll('#plan .now, #plan .bad');
+  for(var i=0;i<els.length;i++) els[i].classList.remove('now','bad');
+  var labs = document.querySelectorAll('#plan .lap, #plan [id^="ver-"]');
+  for(var j=0;j<labs.length;j++){ labs[j].textContent = ''; labs[j].className = labs[j].className.indexOf('lap')>=0 ? 'lap' : ''; }
+}
+function elFor(p){ return document.querySelector('#plan [data-path="'+p+'"]') || document.querySelector('#plan [data-c="'+p+'"]'); }
+function markFrame(fr, cls){
+  var olds = document.querySelectorAll('#plan .now');
+  for(var i=0;i<olds.length;i++) olds[i].classList.remove('now');
+  var el = elFor(fr.path);
+  if(el){ el.classList.add(cls || 'now'); if(el.scrollIntoView){ try{ el.scrollIntoView({block:'nearest'}); }catch(e){} } }
+  if(fr.laps) Object.keys(fr.laps).forEach(function(k){
+    var lp = $('#lap-'+idOf(k)), blk = getBlock(k);
+    if(lp && blk) lp.textContent = 'lap ' + fr.laps[k] + ' of ' + blk.n;
+  });
+  if(fr.c==='IF'){
+    var v = $('#ver-'+idOf(fr.path));
+    if(v){ v.className = 'verdict ' + (fr.yes ? 'yes' : 'no'); v.textContent = fr.yes ? 'Yes! In sights' : 'No target'; }
+  }
+}
+function showResult(kind, html){
+  var r = $('#result');
+  r.className = 'result' + (kind==='win' ? ' win' : '');
+  r.innerHTML = html; r.hidden = false;
+  if(r.scrollIntoView){ try{ r.scrollIntoView({block:'nearest'}); }catch(e){} }
+}
+function hideResult(){ $('#result').hidden = true; }
+function renderArmory(){
+  $('#swatches').innerHTML = PAINTS.map(function(p,i){
+    return '<button data-paint="'+p+'" style="background:'+p+'" aria-pressed="'+(S.settings.paint===p)+'" aria-label="Gear color '+(i+1)+'"></button>';
+  }).join('');
+  $('#speed').value = S.settings.speed; $('#speedOut').textContent = SPEED_WORD[S.settings.speed];
+  $('#laserOpt').checked = !!S.settings.laser; $('#sound').checked = !!S.settings.sound;
+  document.documentElement.style.setProperty('--step', SPEED_MS[S.settings.speed] + 'ms');
+}
+function renderAll(){
+  renderMissions(); renderBrief(); renderProgram(); renderArmory(); drawPlayerBody(); resetFlight();
+}
+
+/* ---------- editing the plan ---------- */
+function getBlock(p){
+  var parts = String(p).split('.').map(Number), list = S.program, b = null;
+  for(var k=0;k<parts.length;k++){ b = list[parts[k]]; if(!b) return null; list = b.kids || []; }
+  return b;
+}
+function parentList(p){
+  var parts = String(p).split('.').map(Number);
+  if(parts.length===1) return {list:S.program, i:parts[0]};
+  return {list:getBlock(parts.slice(0,-1).join('.')).kids, i:parts[parts.length-1]};
+}
+function addCmd(t){
+  if(S.running) return;
+  audioInit(); tone('tap'); hideResult(); resetFlight();
+  var list = S.program, prefix = '';
+  if(S.target!==''){ var c = getBlock(S.target); if(c){ list = c.kids; prefix = S.target; } else S.target = ''; }
+  if(CONTAINERS[t]){
+    if(depthOf(S.target) >= 2) return;
+    list.push(t==='REP' ? {t:'REP', n:3, kids:[]} : {t:'IF', kids:[]});
+    S.target = prefix==='' ? ''+(list.length-1) : prefix+'.'+(list.length-1);
+  } else list.push({t:t});
+  renderProgram();
+}
+function removeAt(p){
+  var pl = parentList(p);
+  pl.list.splice(pl.i,1);
+  S.target = '';
+  hideResult(); resetFlight(); renderProgram();
+}
+function lastPath(list, prefix){
+  if(!list.length) return null;
+  var i = list.length-1, b = list[i], p = prefix==='' ? ''+i : prefix+'.'+i;
+  if(CONTAINERS[b.t] && b.kids.length) return lastPath(b.kids, p);
+  return p;
+}
+function undo(){
+  if(S.running || !S.program.length) return;
+  if(S.target!==''){
+    var c = getBlock(S.target), keep = S.target;
+    if(c && c.kids.length){ var lp = lastPath(c.kids, S.target); var pl = parentList(lp); pl.list.splice(pl.i,1); S.target = keep; }
+    else removeAt(S.target);
+  } else {
+    var p = lastPath(S.program, ''); var q = parentList(p); q.list.splice(q.i,1);
+  }
+  hideResult(); resetFlight(); renderProgram();
+}
+function gotoLevel(i){
+  runId++; S.running = false;
+  S.level = i; S.program = []; S.target = '';
+  hideResult(); save(); renderAll();
+}
+
+/* ---------- running ---------- */
+function failText(res){
+  if(res.why==='edge') return '<p><b>Bonk! That\'s the wall.</b> The red block walked off the arena. Turn before the edge.</p>';
+  if(res.why==='crate') return '<p><b>Bonk! A crate is in the way.</b> Look at the red block and walk around the crate.</p>';
+  if(res.why==='bump') return '<p><b>You walked into a target.</b> Knock it down first, or walk around it.</p>';
+  if(res.why==='lava') return '<p><b>The floor is lava!</b> The red block stepped in it. Find a path around.</p>';
+  if(res.why==='empty') return '<p><b>Click. Out of darts!</b> Grab an ammo box, or only shoot when a target is in your sights.</p>';
+  if(res.why==='targets') return '<p><b>Still standing: ' + res.left + '.</b> Line up with each one, face it, and Shoot. Darts only fly straight.</p>';
+  return '<p><b>All targets down!</b> Now finish the plan on the flag.</p>';
+}
+function go(){
+  var lv = cur();
+  if(S.running){ runId++; S.running = false; resetFlight(); renderProgram(); return; }
+  hideResult();
+  if(!countBlocks(S.program)){ showResult('warn','<p><b>Your battle plan is empty.</b> Tap a command to add it.</p>'); return; }
+  if(isBuild() && !lv.targets.length && !lv.base){ showResult('warn','<p><b>No goal yet.</b> Add a target or a flag to the arena first.</p>'); return; }
+  audioInit();
+  S.target = ''; S.running = true;
+  var my = ++runId;
+  resetFlight(); renderProgram();
+  var sim = simulate(lv, S.program);
+  var angle = lv.start.d*90, ms = SPEED_MS[S.settings.speed];
+  var i = 0;
+  function next(){
+    if(my!==runId) return;
+    if(i>=sim.frames.length){ finish(sim.result, my); return; }
+    var fr = sim.frames[i++];
+    markFrame(fr);
+    var body = $('#playerBody'), wait = ms;
+    if(fr.turn){ angle += fr.turn*90; placePlayer(fr.x, fr.y, angle); tone('turn'); hideLaser(); }
+    else if(fr.c==='F'){
+      if(fr.ev==='edge'||fr.ev==='crate'||fr.ev==='bump'){ body.classList.remove('shake'); void body.getBoundingClientRect(); body.classList.add('shake'); tone('fail'); }
+      else { placePlayer(fr.x, fr.y, angle); tone('walk'); hideLaser(); }
+    }
+    else if(fr.c==='IF'){ tone(fr.yes ? 'yes' : 'no'); }
+    else if(fr.c==='S'){
+      if(fr.ev==='empty'){ tone('fail'); body.classList.remove('shake'); void body.getBoundingClientRect(); body.classList.add('shake'); }
+      else { shoot(fr, angle, ms); setDarts(fr.darts); }
+    }
+    sleep(wait).then(function(){
+      if(my!==runId) return;
+      drawLaser(fr.x, fr.y, fr.d, fr.down);
+      if(fr.ev==='ammo'){
+        var am = $('#am'+fr.ammoIdx); if(am) am.classList.add('taken');
+        var c = center(fr.x, fr.y);
+        addFx('<text class="fade" x="'+c[0]+'" y="'+(c[1]-40)+'" text-anchor="middle" font-family="Bungee, sans-serif" font-size="26" fill="#FFD23F" stroke="#1C2430" stroke-width="1.5">+'+fr.gain+' darts</text>');
+        tone('ammo'); setDarts(fr.darts);
+      }
+      if(fr.ev==='lava'){ body.classList.remove('shake'); void body.getBoundingClientRect(); body.classList.add('shake'); tone('fail'); sleep(380).then(next); }
+      else next();
+    });
+  }
+  sleep(200).then(next);
+}
+function shoot(fr, angle, ms){
+  var d = $('#dart'), c = center(fr.x, fr.y), dx = DIRS[fr.d][0], dy = DIRS[fr.d][1];
+  var sx = c[0]+dx*55, sy = c[1]+dy*55, ex = fr.end.x*100, ey = fr.end.y*100;
+  var dist = Math.abs(ex-sx)+Math.abs(ey-sy), t = Math.max(120, Math.min(ms*0.7, dist*1.1));
+  tone('pew');
+  d.style.transition = 'none';
+  d.style.transform = 'translate('+sx+'px,'+sy+'px) rotate('+angle+'deg)';
+  d.style.opacity = '1';
+  d.getBoundingClientRect();
+  d.style.transition = 'transform '+t+'ms linear';
+  d.style.transform = 'translate('+ex+'px,'+ey+'px) rotate('+angle+'deg)';
+  setTimeout(function(){
+    d.style.opacity = '0';
+    if(fr.ev==='hit'){ knock(fr.hitIdx); tone('hit'); }
+    else { stuckDart(fr.end, angle); tone('thud'); }
+  }, t);
+}
+function finish(res, my){
+  if(my!==runId) return;
+  S.running = false;
+  renderProgram();
+  if(res.ok){
+    var lv = cur(), n = countBlocks(S.program), st = starsFor(lv, S.program);
+    tone('win');
+    var body = $('#playerBody'); body.classList.remove('spin'); void body.getBoundingClientRect(); body.classList.add('spin');
+    var h = '<div><div class="big">Mission complete</div>';
+    if(!isBuild()){
+      if(!S.progress[S.level] || S.progress[S.level]<st) S.progress[S.level] = st;
+      save(); renderMissions();
+      h += '<div class="stars" aria-label="'+st+' of 3 stars">' + '★★★'.slice(0,st) + '<s>' + '★★★'.slice(0,3-st) + '</s></div></div>';
+      h += '<p>You used ' + n + (n===1?' block':' blocks') + '.' + (st<3 ? ' Can you do it in ' + lv.par + '? Look for moves that repeat.' : ' Three stars. Sharpshooter!') + '</p>';
+      h += (S.level < LEVELS.length-1) ? '<button data-next="'+(S.level+1)+'">Next mission</button>' : '<button data-next="'+BUILD+'">Build your own</button>';
+    } else {
+      h += '</div><p>Your mission works in ' + n + (n===1?' block':' blocks') + '. Hand it to a teammate and see if they can beat that.</p><button data-clearplan="1">Clear the plan</button>';
+    }
+    showResult('win', h);
+  } else {
+    tone('fail');
+    if(res.path!=null){ var el = elFor(res.path); if(el){ el.classList.remove('now'); el.classList.add('bad'); } }
+    showResult('fail', failText(res));
+  }
+}
+
+/* ---------- builder ---------- */
+function buildTap(x,y){
+  if(!isBuild() || S.running) return;
+  var c = S.custom, onStart = (c.start.x===x && c.start.y===y), t = S.tool;
+  function notHere(a){ return !(a.x===x && a.y===y); }
+  function wipe(){
+    c.targets = c.targets.filter(notHere); c.crates = c.crates.filter(notHere);
+    c.lava = c.lava.filter(notHere); c.ammo = c.ammo.filter(notHere);
+    if(c.base && c.base.x===x && c.base.y===y) c.base = null;
+  }
+  hideResult();
+  if(t==='player'){
+    if(onStart) c.start.d = (c.start.d+1)%4;
+    else { wipe(); c.start = {x:x, y:y, d:c.start.d}; }
+  }
+  else if(t==='erase'){ wipe(); }
+  else if(onStart){ showResult('warn','<p><b>You are standing there.</b> Pick "You" and move first.</p>'); return; }
+  else if(t==='base'){ wipe(); c.base = {x:x, y:y}; }
+  else if(t==='crate'){ wipe(); c.crates.push({x:x, y:y}); }
+  else if(t==='lava'){ wipe(); c.lava.push({x:x, y:y}); }
+  else if(t==='ammo'){ wipe(); c.ammo.push({x:x, y:y, n:3}); }
+  else { wipe(); c.targets.push({x:x, y:y, t:t}); }
+  audioInit(); tone('tap');
+  save(); renderBrief(); resetFlight();
+}
+
+/* ---------- events ---------- */
+function wire(){
+  $('#missions').addEventListener('click', function(e){
+    var b = e.target.closest('[data-level]'); if(b) gotoLevel(Number(b.getAttribute('data-level')));
+  });
+  $('#palette').addEventListener('click', function(e){
+    var b = e.target.closest('[data-cmd]'); if(b && !b.disabled) addCmd(b.getAttribute('data-cmd'));
+  });
+  $('#plan').addEventListener('click', function(e){
+    if(S.running) return;
+    var el;
+    if((el = e.target.closest('[data-step]'))){
+      var blk = getBlock(el.getAttribute('data-p'));
+      blk.n = Math.max(2, Math.min(9, blk.n + Number(el.getAttribute('data-step'))));
+      hideResult(); resetFlight(); renderProgram(); return;
+    }
+    if((el = e.target.closest('[data-del]'))){ removeAt(el.getAttribute('data-del')); return; }
+    if((el = e.target.closest('[data-done]'))){
+      var parts = S.target.split('.'); parts.pop(); S.target = parts.join('.'); renderProgram(); return;
+    }
+    if((el = e.target.closest('[data-path]'))){ removeAt(el.getAttribute('data-path')); return; }
+    if((el = e.target.closest('[data-open]'))){ S.target = el.getAttribute('data-open'); renderProgram(); return; }
+    if((el = e.target.closest('[data-body]'))){ S.target = el.getAttribute('data-body'); renderProgram(); return; }
+  });
+  $('#goBtn').addEventListener('click', go);
+  $('#undoBtn').addEventListener('click', undo);
+  $('#clearBtn').addEventListener('click', function(){ if(S.running) return; S.program = []; S.target = ''; hideResult(); resetFlight(); renderProgram(); });
+  $('#result').addEventListener('click', function(e){
+    var b = e.target.closest('[data-next]');
+    if(b){ gotoLevel(Number(b.getAttribute('data-next'))); return; }
+    if(e.target.closest('[data-clearplan]')){ S.program = []; S.target = ''; hideResult(); resetFlight(); renderProgram(); }
+  });
+  $('#sayBtn').addEventListener('click', function(){ speak(cur().name + '. ' + cur().brief); });
+  if(!('speechSynthesis' in window)) $('#sayBtn').hidden = true;
+  $('#tools').addEventListener('click', function(e){
+    var dd = e.target.closest('[data-darts]');
+    if(dd){ S.custom.darts = Math.max(0, Math.min(20, S.custom.darts + Number(dd.getAttribute('data-darts')))); save(); renderBrief(); resetFlight(); return; }
+    var b = e.target.closest('[data-tool]'); if(!b) return;
+    S.tool = b.getAttribute('data-tool'); renderBrief();
+  });
+  $('#hits').addEventListener('click', function(e){
+    var r = e.target.closest('.hit'); if(r) buildTap(Number(r.getAttribute('data-x')), Number(r.getAttribute('data-y')));
+  });
+  $('#armoryBtn').addEventListener('click', function(){
+    var a = $('#armory'); a.hidden = !a.hidden;
+    this.setAttribute('aria-expanded', String(!a.hidden));
+  });
+  $('#swatches').addEventListener('click', function(e){
+    var b = e.target.closest('[data-paint]'); if(!b) return;
+    S.settings.paint = b.getAttribute('data-paint'); save(); renderArmory(); drawPlayerBody();
+  });
+  $('#speed').addEventListener('input', function(){ S.settings.speed = Number(this.value); save(); renderArmory(); });
+  $('#laserOpt').addEventListener('change', function(){ S.settings.laser = this.checked; save(); if(!S.running) resetFlight(); });
+  $('#sound').addEventListener('change', function(){ S.settings.sound = this.checked; save(); if(this.checked){ audioInit(); tone('ammo'); } });
+}
+
+function start(seed){
+  load(seed);
+  drawStatic(); wire(); renderAll();
+  try{
+    if(window.claude && window.claude.hot && window.claude.hot.snapshot){
+      window.claude.hot.snapshot(function(){
+        return {level:S.level, program:S.program, progress:S.progress, settings:S.settings, custom:S.custom};
+      });
+    }
+  }catch(e){}
+}
+if(window.claude && window.claude.hot && window.claude.hot.ready) window.claude.hot.ready(start);
+else start((window.claude && window.claude.hot && window.claude.hot.data) || {});
+})();
+</script>
+</body>
+</html>
